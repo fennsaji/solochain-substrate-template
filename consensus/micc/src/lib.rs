@@ -43,7 +43,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-	traits::{DisabledValidators, FindAuthor, Get, OnTimestampSet, OneSessionHandler, EstimateNextSessionRotation},
+	traits::{DisabledValidators, FindAuthor, Get, OnTimestampSet, OneSessionHandler},
 	BoundedSlice, BoundedVec, ConsensusEngineId, Parameter,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -80,7 +80,6 @@ impl<T: pallet_timestamp::Config> Get<T::Moment> for MinimumPeriodTimesTwo<T> {
 pub mod pallet {
 	use super::*;
 	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
 
 	#[pallet::config]
 	pub trait Config: pallet_timestamp::Config + frame_system::Config {

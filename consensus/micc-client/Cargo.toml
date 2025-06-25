@@ -64,5 +64,4 @@ sc-network = { default-features = true, workspace = true}
 sp-keyring = { default-features = true, workspace = true  }
 sp-timestamp = { default-features = true, workspace = true  }
 sp-tracing = { default-features = true, workspace = true  }
-substrate-test-runtime-client = { workspace = true  }
 tokio = { workspace = true, default-features = true }

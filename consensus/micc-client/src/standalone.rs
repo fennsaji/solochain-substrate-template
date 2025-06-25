@@ -29,6 +29,7 @@ use sp_api::{Core, ProvideRuntimeApi};
 use sp_application_crypto::{AppCrypto, AppPublic};
 use sp_blockchain::Result as CResult;
 use sp_consensus::Error as ConsensusError;
+use sp_consensus_micc::MICC;
 use sp_consensus_slots::Slot;
 use sp_core::crypto::{ByteArray, Pair};
 use sp_keystore::KeystorePtr;
@@ -97,7 +98,7 @@ pub async fn claim_slot<P: Pair>(
 ) -> Option<P::Public> {
 	let expected_author = slot_author::<P>(slot, authorities);
 	expected_author.and_then(|p| {
-		if keystore.has_keys(&[(p.to_raw_vec(), sp_application_crypto::key_types::MICC)]) {
+		if keystore.has_keys(&[(p.to_raw_vec(), MICC)]) {
 			log::info!(target: LOG_TARGET, "✅ Claimed slot {} for authority", slot);
 			Some(p.clone())
 		} else {

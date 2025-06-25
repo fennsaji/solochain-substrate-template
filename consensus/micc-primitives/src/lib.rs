@@ -23,14 +23,18 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use codec::{Codec, Decode, Encode};
-use sp_runtime::ConsensusEngineId;
+use sp_runtime::{ConsensusEngineId, KeyTypeId};
 
 pub mod digests;
 pub mod inherents;
 
+pub const MICC: KeyTypeId = KeyTypeId(*b"micc");
+
 pub mod sr25519 {
 	mod app_sr25519 {
-		use sp_application_crypto::{app_crypto, key_types::MICC, sr25519};
+		use sp_application_crypto::{app_crypto, sr25519};
+		use crate::MICC;
+
 		app_crypto!(sr25519, MICC);
 	}
 
@@ -48,7 +52,9 @@ pub mod sr25519 {
 
 pub mod ed25519 {
 	mod app_ed25519 {
-		use sp_application_crypto::{app_crypto, ed25519, key_types::MICC};
+		use sp_application_crypto::{app_crypto, ed25519};
+		use crate::MICC;
+		
 		app_crypto!(ed25519, MICC);
 	}
 
