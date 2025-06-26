@@ -34,13 +34,13 @@ use frame_support::{
 };
 use frame_system::limits::{BlockLength, BlockWeights};
 use pallet_transaction_payment::{ConstFeeMultiplier, FungibleAdapter, Multiplier};
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+use sp_consensus_micc::sr25519::AuthorityId as MiccId;
 use sp_runtime::{traits::One, Perbill};
 use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-	AccountId, Aura, Balance, Balances, Block, BlockNumber, Hash, Nonce, PalletInfo, Runtime,
+	AccountId, Micc, Balance, Balances, Block, BlockNumber, Hash, Nonce, PalletInfo, Runtime,
 	RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
 	System, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
@@ -90,12 +90,12 @@ impl frame_system::Config for Runtime {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-impl pallet_aura::Config for Runtime {
-	type AuthorityId = AuraId;
+impl pallet_micc::Config for Runtime {
+	type AuthorityId = MiccId;
 	type DisabledValidators = ();
 	type MaxAuthorities = ConstU32<32>;
 	type AllowMultipleBlocksPerSlot = ConstBool<false>;
-	type SlotDuration = pallet_aura::MinimumPeriodTimesTwo<Runtime>;
+	type SlotDuration = pallet_micc::MinimumPeriodTimesTwo<Runtime>;
 }
 
 impl pallet_grandpa::Config for Runtime {
@@ -113,7 +113,7 @@ impl pallet_grandpa::Config for Runtime {
 impl pallet_timestamp::Config for Runtime {
 	/// A timestamp: milliseconds since the unix epoch.
 	type Moment = u64;
-	type OnTimestampSet = Aura;
+	type OnTimestampSet = Micc;
 	type MinimumPeriod = ConstU64<{ SLOT_DURATION / 2 }>;
 	type WeightInfo = ();
 }

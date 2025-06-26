@@ -31,7 +31,7 @@ use frame_support::{
 };
 use pallet_grandpa::AuthorityId as GrandpaId;
 use sp_api::impl_runtime_apis;
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+use sp_consensus_micc::sr25519::AuthorityId as MiccId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	traits::{Block as BlockT, NumberFor},
@@ -42,7 +42,7 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-	AccountId, Aura, Balance, Block, Executive, Grandpa, InherentDataExt, Nonce, Runtime,
+	AccountId, Micc, Balance, Block, Executive, Grandpa, InherentDataExt, Nonce, Runtime,
 	RuntimeCall, RuntimeGenesisConfig, SessionKeys, System, TransactionPayment, VERSION,
 };
 
@@ -118,13 +118,13 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
-		fn slot_duration() -> sp_consensus_aura::SlotDuration {
-			sp_consensus_aura::SlotDuration::from_millis(Aura::slot_duration())
+	impl sp_consensus_micc::MiccApi<Block, MiccId> for Runtime {
+		fn slot_duration() -> sp_consensus_micc::SlotDuration {
+			sp_consensus_micc::SlotDuration::from_millis(Micc::slot_duration())
 		}
 
-		fn authorities() -> Vec<AuraId> {
-			pallet_aura::Authorities::<Runtime>::get().into_inner()
+		fn authorities() -> Vec<MiccId> {
+			pallet_micc::Authorities::<Runtime>::get().into_inner()
 		}
 	}
 

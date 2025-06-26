@@ -22,7 +22,7 @@ frame-system-benchmarking = { optional = true, workspace = true }
 frame-system-rpc-runtime-api.workspace = true
 frame-system.workspace = true
 frame-try-runtime = { optional = true, workspace = true }
-pallet-aura.workspace = true
+pallet-micc = { path = "../consensus/micc", default-features = false }
 pallet-balances.workspace = true
 pallet-grandpa.workspace = true
 pallet-sudo.workspace = true
@@ -33,7 +33,7 @@ scale-info = { features = ["derive", "serde"], workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 sp-api.workspace = true
 sp-block-builder.workspace = true
-sp-consensus-aura = { features = ["serde"], workspace = true }
+sp-consensus-micc = { path = "../consensus/micc-primitives", default-features = false, features = ["serde"] }
 sp-consensus-grandpa = { features = ["serde"], workspace = true }
 sp-core = { features = ["serde"], workspace = true }
 sp-genesis-builder.workspace = true
@@ -61,7 +61,7 @@ std = [
 	"frame-system-rpc-runtime-api/std",
 	"frame-system/std",
 	"frame-try-runtime?/std",
-	"pallet-aura/std",
+	"pallet-micc/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
 	"pallet-sudo/std",
@@ -72,7 +72,7 @@ std = [
 	"serde_json/std",
 	"sp-api/std",
 	"sp-block-builder/std",
-	"sp-consensus-aura/std",
+	"sp-consensus-micc/std",
 	"sp-consensus-grandpa/std",
 	"sp-core/std",
 	"sp-genesis-builder/std",
@@ -105,7 +105,7 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"frame-try-runtime/try-runtime",
-	"pallet-aura/try-runtime",
+	"pallet-micc/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-grandpa/try-runtime",
 	"pallet-sudo/try-runtime",
