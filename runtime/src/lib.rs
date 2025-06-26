@@ -52,7 +52,7 @@ pub mod opaque {
 
 impl_opaque_keys! {
 	pub struct SessionKeys {
-		pub aura: Aura,
+		pub micc: Micc,
 		pub grandpa: Grandpa,
 	}
 }
@@ -79,7 +79,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 mod block_times {
 	/// This determines the average expected block time that we are targeting. Blocks will be
 	/// produced at a minimum duration defined by `SLOT_DURATION`. `SLOT_DURATION` is picked up by
-	/// `pallet_timestamp` which is in turn picked up by `pallet_aura` to implement `fn
+	/// `pallet_timestamp` which is in turn picked up by `pallet_micc` to implement `fn
 	/// slot_duration()`.
 	///
 	/// Change this to adjust the block time.
@@ -148,14 +148,12 @@ pub type BlockId = generic::BlockId<Block>;
 
 /// The `TransactionExtension` to the basic transaction logic.
 pub type TxExtension = (
-	frame_system::CheckNonZeroSender<Runtime>,
 	frame_system::CheckSpecVersion<Runtime>,
 	frame_system::CheckTxVersion<Runtime>,
 	frame_system::CheckGenesis<Runtime>,
 	frame_system::CheckEra<Runtime>,
 	frame_system::CheckNonce<Runtime>,
 	frame_system::CheckWeight<Runtime>,
-	pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
 	frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
 	frame_system::WeightReclaim<Runtime>,
 );
@@ -208,7 +206,7 @@ mod runtime {
 	pub type Timestamp = pallet_timestamp;
 
 	#[runtime::pallet_index(2)]
-	pub type Aura = pallet_aura;
+	pub type Micc = pallet_micc;
 
 	#[runtime::pallet_index(3)]
 	pub type Grandpa = pallet_grandpa;
@@ -217,8 +215,5 @@ mod runtime {
 	pub type Balances = pallet_balances;
 
 	#[runtime::pallet_index(5)]
-	pub type TransactionPayment = pallet_transaction_payment;
-
-	#[runtime::pallet_index(6)]
 	pub type Sudo = pallet_sudo;
 }
