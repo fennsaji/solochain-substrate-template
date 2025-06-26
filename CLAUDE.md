@@ -30,7 +30,6 @@ The project uses a custom MICC consensus system instead of the standard Aura:
 The runtime uses a fee-free transaction extension tuple:
 ```rust
 pub type TxExtension = (
-    frame_system::CheckNonZeroSender<Runtime>,
     frame_system::CheckSpecVersion<Runtime>, 
     frame_system::CheckTxVersion<Runtime>,
     frame_system::CheckGenesis<Runtime>,
