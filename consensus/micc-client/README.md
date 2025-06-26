@@ -298,7 +298,7 @@ let micc_params = StartMiccParams {
     // Event-driven configuration
     transaction_pool: pool.clone(),
     event_driven_config: EventDrivenConfig {
-        max_collection_duration: Duration::from_millis(500),
+        max_collection_duration: Duration::from_millis(400),
         immediate_production_threshold: 10,
         priority_fast_track: true,
         empty_block_interval: Duration::from_secs(3600), // 1 hour
