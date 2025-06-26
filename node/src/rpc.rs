@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use jsonrpsee::RpcModule;
 use sc_transaction_pool_api::TransactionPool;
-use solochain_template_runtime::{opaque::Block, AccountId, Balance, Nonce};
+use solochain_template_runtime::{opaque::Block, AccountId, Nonce};
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
@@ -31,18 +31,15 @@ where
 	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError> + 'static,
 	C: Send + Sync + 'static,
 	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
-	C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
 	C::Api: BlockBuilder<Block>,
 	P: TransactionPool + 'static,
 {
-	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 	use substrate_frame_rpc_system::{System, SystemApiServer};
 
 	let mut module = RpcModule::new(());
 	let FullDeps { client, pool } = deps;
 
 	module.merge(System::new(client.clone(), pool).into_rpc())?;
-	module.merge(TransactionPayment::new(client).into_rpc())?;
 
 	// Extend this RPC with a custom API by using the following syntax.
 	// `YourRpcStruct` should have a reference to a client, which is needed
