@@ -23,7 +23,15 @@ cargo build --release
 
 ## 📁 Scripts
 
-### `start-blockchain.sh` ⭐ **RECOMMENDED**
+### Helper Scripts
+- `build_spec.sh` - Build chain specification
+- `insert_keys.sh` - Insert validator keys
+- `run_node.sh` - Run bootnode
+- `run_node_x.sh` - Run additional validator nodes
+
+### Main Scripts
+
+### `start-blockchain.sh` ⭐ **RECOMMENDED FOR DEVELOPMENT**
 **Single node blockchain (most stable)**
 - Single Alice node in development mode
 - Fee-free transactions enabled
@@ -32,13 +40,22 @@ cargo build --release
 - Event-driven MICC consensus
 - Automatic block production
 
-### `start-3-nodes-simple.sh` 🔗 **MULTI-NODE**
+### `start-3-nodes-simple.sh` 🔗 **MULTI-NODE (SIMPLE)**
 **3 independent nodes for testing**
 - Three separate development nodes (Alice, Bob, Charlie)
 - Each node runs independently on ports 9944, 9945, 9946
 - Fee-free transactions on all nodes
 - Perfect for testing multi-node scenarios
 - No complex consensus synchronization
+
+### `start-3-nodes-proper.sh` 🔗 **MULTI-NODE (SYNCHRONIZED)** ⭐ **RECOMMENDED FOR TESTING**
+**3 validator nodes with proper consensus**
+- Uses PM2 for process management
+- Proper chain specification and key management
+- Synchronized consensus between nodes
+- Alice, Bob, Charlie as validators with proper keys
+- Shared chain state across all nodes
+- Requires: `npm install -g pm2`
 
 ### `test-network.sh` 🧪
 **Comprehensive testing suite**
