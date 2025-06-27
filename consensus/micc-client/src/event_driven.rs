@@ -81,7 +81,7 @@ impl Default for CollectionConfig {
     fn default() -> Self {
         Self {
             min_collection_time: Duration::from_millis(100),
-            max_collection_time: Duration::from_secs(400),
+            max_collection_time: Duration::from_millis(400),
             max_batch_size: 1000,
             priority_threshold: TransactionPriority::MAX / 2, // High priority threshold for immediate production
             network_load_factor: 1.0,
