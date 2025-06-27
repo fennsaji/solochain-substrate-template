@@ -722,8 +722,9 @@ impl<Block: BlockT> SmartEventDrivenController<Block> {
         BlockProductionTrigger::None
     }
     
-    /// Record that a block was produced.
-    pub fn record_block_produced(&mut self) {
+    /// Record that a block was produced and return the number of remaining transactions.
+    /// Returns the count of transactions that should trigger continued production.
+    pub fn record_block_produced(&mut self, current_pool_size: usize) -> usize {
         self.last_block_time = Instant::now();
         self.collection_window = None;
         
@@ -732,7 +733,66 @@ impl<Block: BlockT> SmartEventDrivenController<Block> {
             self.empty_block_timer = Some(Box::pin(sleep(Duration::from_millis(interval_ms))));
         }
         
-        info!(target: LOG_TARGET, "Block produced, resetting collection state");
+        // Update pending transactions count
+        self.pending_transactions = current_pool_size;
+        
+        info!(target: LOG_TARGET, "Block produced, {} transactions remaining in pool", current_pool_size);
+        current_pool_size
+    }
+    
+    /// Check if continuous production should continue based on remaining transactions.
+    pub fn should_continue_production(&self, remaining_transactions: usize) -> bool {
+        if remaining_transactions == 0 {
+            return false;
+        }
+        
+        // Continue if we have a significant number of transactions
+        if remaining_transactions >= 5 {
+            info!(target: LOG_TARGET, "Continuing production: {} transactions remaining", remaining_transactions);
+            return true;
+        }
+        
+        // Continue for any transactions if we're in active production mode
+        if remaining_transactions > 0 && self.last_block_time.elapsed() < Duration::from_secs(5) {
+            info!(target: LOG_TARGET, "Continuing production: {} transactions in active production window", remaining_transactions);
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Start a continuous production collection window for remaining transactions.
+    pub fn start_continuation_window(&mut self, remaining_transactions: usize, highest_priority: Option<TransactionPriority>) -> BlockProductionTrigger {
+        if remaining_transactions == 0 {
+            return BlockProductionTrigger::None;
+        }
+        
+        let tps = self.network_load_tracker.get_tps();
+        
+        // Check for immediate production triggers
+        if let Some(priority) = highest_priority {
+            if priority >= self.config.collection.priority_threshold {
+                info!(target: LOG_TARGET, "Continuation: High-priority transaction ({}), producing immediately", priority);
+                return BlockProductionTrigger::ProduceImmediately;
+            }
+        }
+        
+        if remaining_transactions >= self.config.collection.max_batch_size {
+            info!(target: LOG_TARGET, "Continuation: Large batch ({}), producing immediately", remaining_transactions);
+            return BlockProductionTrigger::ProduceImmediately;
+        }
+        
+        // Start collection window for remaining transactions
+        self.collection_window = Some(SmartCollectionWindow::new(
+            &self.config.collection,
+            remaining_transactions,
+            highest_priority,
+            tps,
+            false, // Not priority triggered
+        ));
+        
+        info!(target: LOG_TARGET, "Continuation: Started collection window for {} remaining transactions", remaining_transactions);
+        BlockProductionTrigger::StartCollectionWindow
     }
     
     /// Check if we should produce a block immediately.
@@ -880,8 +940,9 @@ impl<Block: BlockT> EventDrivenController<Block> {
         BlockProductionTrigger::None
     }
     
-    /// Record that a block was produced.
-    pub fn record_block_produced(&mut self) {
+    /// Record that a block was produced and return the number of remaining transactions.
+    /// Returns the count of transactions that should trigger continued production.
+    pub fn record_block_produced(&mut self, current_pool_size: usize) -> usize {
         self.last_block_time = Instant::now();
         self.collection_window = None;
         
@@ -889,6 +950,53 @@ impl<Block: BlockT> EventDrivenController<Block> {
         if let Some(interval_ms) = self.config.empty_block_interval_ms {
             self.empty_block_timer = Some(Box::pin(sleep(Duration::from_millis(interval_ms))));
         }
+        
+        // Update pending transactions count
+        self.pending_transactions = current_pool_size;
+        
+        info!(target: LOG_TARGET, "Block produced, {} transactions remaining in pool", current_pool_size);
+        current_pool_size
+    }
+    
+    /// Check if continuous production should continue based on remaining transactions.
+    pub fn should_continue_production(&self, remaining_transactions: usize) -> bool {
+        if remaining_transactions == 0 {
+            return false;
+        }
+        
+        // Continue if we have a significant number of transactions
+        if remaining_transactions >= 3 {
+            info!(target: LOG_TARGET, "Continuing production: {} transactions remaining", remaining_transactions);
+            return true;
+        }
+        
+        // Continue for any transactions if we're in active production mode
+        if remaining_transactions > 0 && self.last_block_time.elapsed() < Duration::from_secs(3) {
+            info!(target: LOG_TARGET, "Continuing production: {} transactions in active production window", remaining_transactions);
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Start a continuous production collection window for remaining transactions.
+    pub fn start_continuation_window(&mut self, remaining_transactions: usize) -> BlockProductionTrigger {
+        if remaining_transactions == 0 {
+            return BlockProductionTrigger::None;
+        }
+        
+        // Check for immediate production triggers
+        if remaining_transactions >= self.config.collection.max_batch_size {
+            info!(target: LOG_TARGET, "Continuation: Large batch ({}), producing immediately", remaining_transactions);
+            return BlockProductionTrigger::ProduceImmediately;
+        }
+        
+        // Start collection window for remaining transactions
+        let duration = self.calculate_collection_window_duration(remaining_transactions);
+        self.collection_window = Some(CollectionWindow::new(duration, remaining_transactions));
+        
+        info!(target: LOG_TARGET, "Continuation: Started collection window for {} remaining transactions (duration: {:?})", remaining_transactions, duration);
+        BlockProductionTrigger::StartCollectionWindow
     }
     
     /// Calculate optimal collection window duration based on transaction count and network load.
@@ -978,12 +1086,55 @@ where
     // Use unfold to create a true event-driven monitoring stream
     let initial_status = pool.status().ready; // Initialize with current pool status to avoid false positives
     Box::pin(futures::stream::unfold(
-        (pool.import_notification_stream(), initial_status, None::<Instant>, tokio::time::interval(Duration::from_millis(500))),
-        move |(mut import_stream, mut last_status, mut collection_timer, mut backup_interval)| {
+        (pool.import_notification_stream(), initial_status, None::<Instant>, tokio::time::interval(Duration::from_millis(500)), false),
+        move |(mut import_stream, mut last_status, mut collection_timer, mut backup_interval, mut post_block_check)| {
             let pool = pool_clone.clone();
             let config = config_clone.clone();
             
             async move {
+                // Post-block re-evaluation: Check if we need to continue production after a block was created
+                if post_block_check {
+                    post_block_check = false; // Reset flag
+                    
+                    let status = pool.status();
+                    let current_ready = status.ready;
+                    
+                    if current_ready > 0 {
+                        info!(target: LOG_TARGET, "Post-block check: {} transactions remaining, continuing production", current_ready);
+                        
+                        // Check priority for immediate production
+                        let ready_transactions = pool.ready();
+                        let highest_priority = ready_transactions
+                            .map(|tx| *tx.priority())
+                            .max()
+                            .unwrap_or(0);
+                        
+                        if highest_priority >= config.collection.priority_threshold {
+                            info!(target: LOG_TARGET, "Post-block check: High-priority transaction detected (priority: {}), producing immediately", highest_priority);
+                            last_status = current_ready;
+                            post_block_check = true; // Schedule another post-block check
+                            return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval, post_block_check)));
+                        }
+                        
+                        if current_ready >= config.collection.max_batch_size {
+                            info!(target: LOG_TARGET, "Post-block check: Large batch detected ({} transactions), producing immediately", current_ready);
+                            last_status = current_ready;
+                            post_block_check = true; // Schedule another post-block check
+                            return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval, post_block_check)));
+                        }
+                        
+                        // Start new collection window for remaining transactions
+                        let collection_duration = calculate_collection_duration(&config, current_ready);
+                        collection_timer = Some(Instant::now() + collection_duration);
+                        last_status = current_ready;
+                        info!(target: LOG_TARGET, "Post-block check: Starting new collection window for {}ms with {} remaining transactions", 
+                            collection_duration.as_millis(), current_ready);
+                    } else {
+                        info!(target: LOG_TARGET, "Post-block check: No remaining transactions, continuing monitoring");
+                        last_status = 0;
+                    }
+                }
+                
                 tokio::select! {
                     // PRIMARY: Immediate response to transaction imports
                     tx_hash = import_stream.next() => {
@@ -1007,7 +1158,8 @@ where
                                     if highest_priority >= config.collection.priority_threshold {
                                         info!(target: LOG_TARGET, "High-priority transaction detected (priority: {}), producing block immediately", highest_priority);
                                         collection_timer = None;
-                                        return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval)));
+                                        post_block_check = true; // Schedule post-block re-evaluation
+                                        return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval, post_block_check)));
                                     }
                                     
                                     // Start collection window if not already active (for non-high-priority transactions)
@@ -1021,12 +1173,13 @@ where
                                         if ready_count >= config.collection.max_batch_size {
                                             info!(target: LOG_TARGET, "Large batch detected ({} transactions), producing block immediately", ready_count);
                                             collection_timer = None;
-                                            return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval)));
+                                            post_block_check = true; // Schedule post-block re-evaluation
+                                            return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval, post_block_check)));
                                         }
                                     }
                                 }
                                 
-                                return Some((SlotTrigger::NoAction, (import_stream, last_status, collection_timer, backup_interval)));
+                                return Some((SlotTrigger::NoAction, (import_stream, last_status, collection_timer, backup_interval, post_block_check)));
                             }
                             None => {
                                 warn!(target: LOG_TARGET, "Import stream ended, falling back to polling");
@@ -1047,7 +1200,8 @@ where
                                     info!(target: LOG_TARGET, "Collection window expired, producing block with {} transactions", ready_count);
                                     collection_timer = None;
                                     last_status = ready_count;
-                                    return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval)));
+                                    post_block_check = true; // Schedule post-block re-evaluation
+                                    return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval, post_block_check)));
                                 } else {
                                     collection_timer = None;
                                 }
@@ -1069,7 +1223,8 @@ where
                                 
                                 if highest_priority >= config.collection.priority_threshold {
                                     info!(target: LOG_TARGET, "Backup check: High-priority transaction detected (priority: {}), producing block immediately", highest_priority);
-                                    return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval)));
+                                    post_block_check = true; // Schedule post-block re-evaluation
+                                    return Some((SlotTrigger::CreateBlock, (import_stream, last_status, collection_timer, backup_interval, post_block_check)));
                                 }
                                 
                                 let collection_duration = calculate_collection_duration(&config, ready_count);
@@ -1081,7 +1236,7 @@ where
                             }
                         }
                         
-                        return Some((SlotTrigger::NoAction, (import_stream, last_status, collection_timer, backup_interval)));
+                        return Some((SlotTrigger::NoAction, (import_stream, last_status, collection_timer, backup_interval, post_block_check)));
                     }
                 }
                 
@@ -1482,6 +1637,17 @@ mod tests {
         // Test network load tracking
         let load = controller.get_network_load();
         assert!(load >= 0.0);
+        
+        // Test block production recording and continuation
+        let remaining = controller.record_block_produced(5);
+        assert_eq!(remaining, 5);
+        
+        // Test continuation logic
+        assert!(controller.should_continue_production(10));
+        assert!(!controller.should_continue_production(0));
+        
+        let continuation_trigger = controller.start_continuation_window(5, None);
+        assert_eq!(continuation_trigger, BlockProductionTrigger::StartCollectionWindow);
     }
 
     #[test]
@@ -1504,5 +1670,65 @@ mod tests {
         let priority_window = SmartCollectionWindow::new(&config, 5, Some(1500), 1.0, true);
         assert!(priority_window.duration >= config.min_collection_time);
         assert!(priority_window.highest_priority == Some(1500));
+    }
+
+    #[test]
+    fn test_continuous_production_logic() {
+        use sp_runtime::{generic::Header, traits::BlakeTwo256, testing::UncheckedExtrinsic};
+        type TestBlock = sp_runtime::generic::Block<Header<u32, BlakeTwo256>, UncheckedExtrinsic>;
+        
+        let config = EventDrivenConfig::default();
+        let mut controller = SmartEventDrivenController::<TestBlock>::new(config);
+        
+        // Test block production with remaining transactions
+        let remaining = controller.record_block_produced(15);
+        assert_eq!(remaining, 15);
+        assert_eq!(controller.pending_transactions, 15);
+        
+        // Test should continue production
+        assert!(controller.should_continue_production(15));
+        assert!(controller.should_continue_production(5));
+        assert!(!controller.should_continue_production(0));
+        
+        // Test continuation window for large batch
+        let trigger = controller.start_continuation_window(1000, None);
+        assert_eq!(trigger, BlockProductionTrigger::ProduceImmediately);
+        
+        // Test continuation window for high priority
+        let trigger = controller.start_continuation_window(5, Some(TransactionPriority::MAX));
+        assert_eq!(trigger, BlockProductionTrigger::ProduceImmediately);
+        
+        // Test normal continuation window
+        let trigger = controller.start_continuation_window(10, None);
+        assert_eq!(trigger, BlockProductionTrigger::StartCollectionWindow);
+        assert!(controller.collection_window.is_some());
+        
+        // Test no continuation for empty pool
+        let trigger = controller.start_continuation_window(0, None);
+        assert_eq!(trigger, BlockProductionTrigger::None);
+    }
+
+    #[test]
+    fn test_post_block_evaluation_logic() {
+        // This test would require integration testing with actual transaction pool
+        // For now, we test the controller logic components
+        use sp_runtime::{generic::Header, traits::BlakeTwo256, testing::UncheckedExtrinsic};
+        type TestBlock = sp_runtime::generic::Block<Header<u32, BlakeTwo256>, UncheckedExtrinsic>;
+        
+        let config = EventDrivenConfig::default();
+        let mut controller = SmartEventDrivenController::<TestBlock>::new(config);
+        
+        // Simulate a block production cycle
+        controller.handle_pool_event(PoolEvent::PoolReady(20, None));
+        assert!(controller.collection_window.is_some());
+        
+        // Record block production with remaining transactions
+        controller.record_block_produced(10);
+        assert!(controller.collection_window.is_none());
+        
+        // Test that continuation can be started
+        let trigger = controller.start_continuation_window(10, None);
+        assert_eq!(trigger, BlockProductionTrigger::StartCollectionWindow);
+        assert!(controller.collection_window.is_some());
     }
 }

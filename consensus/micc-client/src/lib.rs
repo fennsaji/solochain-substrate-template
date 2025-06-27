@@ -60,6 +60,11 @@ use tokio::time;
 mod import_queue;
 pub mod standalone;
 pub mod event_driven;
+pub mod monitoring;
+
+/// Security integration tests for client consensus implementation
+#[cfg(test)]
+mod security_integration_tests;
 
 pub use crate::standalone::{find_pre_digest, slot_duration};
 pub use sc_consensus_slots::SlotTrigger;
@@ -557,12 +562,23 @@ where
 		slot: Slot,
 		authorities: &Self::AuxData,
 	) -> Option<Self::Claim> {
-		// For force authoring (dev mode), allow any authority in keystore to claim any slot
+		// Calculate the expected author for this slot (proper round-robin assignment)
+		let expected_author = crate::standalone::slot_author::<P>(slot, authorities);
+		
+		// In force authoring mode, try the expected author first, then fall back to any available authority
 		if self.force_authoring {
-			// Try to find any authority key in our keystore that can sign
+			// First, try to use the correct slot author if available
+			if let Some(expected) = expected_author {
+				if self.keystore.has_keys(&[(expected.to_raw_vec(), MICC)]) {
+					log::info!(target: "micc", "🔧 Force authoring: claiming slot {} with correct authority", slot);
+					return Some(expected.clone());
+				}
+			}
+			
+			// Fallback: try any available authority (but log this as a deviation)
 			for authority in authorities {
 				if self.keystore.has_keys(&[(authority.to_raw_vec(), MICC)]) {
-					log::info!(target: "micc", "🔧 Force authoring: claiming slot {} with available authority", slot);
+					log::warn!(target: "micc", "🔧 Force authoring: claiming slot {} with fallback authority (security deviation)", slot);
 					return Some(authority.clone());
 				}
 			}

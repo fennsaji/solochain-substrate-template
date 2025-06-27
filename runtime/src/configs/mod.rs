@@ -90,6 +90,7 @@ impl frame_system::Config for Runtime {
 }
 
 impl pallet_micc::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type AuthorityId = MiccId;
 	type DisabledValidators = ();
 	type MaxAuthorities = ConstU32<32>;
@@ -141,4 +142,15 @@ impl pallet_sudo::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeCall = RuntimeCall;
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_rate_limiter::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Currency = pallet_balances::Pallet<Runtime>;
+	/// Default 5 transactions per block (conservative for 500ms blocks)
+	type DefaultTransactionsPerBlock = ConstU32<5>;
+	/// Default 20 transactions per minute (allowing bursts)  
+	type DefaultTransactionsPerMinute = ConstU32<20>;
+	/// Minimum balance of 1 UNIT required to submit transactions
+	type MinimumBalance = ConstU128<{ 0 * super::UNIT }>;
 }

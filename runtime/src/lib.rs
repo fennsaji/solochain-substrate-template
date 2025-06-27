@@ -22,6 +22,7 @@ use sp_version::RuntimeVersion;
 pub use frame_system::Call as SystemCall;
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
+pub use pallet_rate_limiter::CheckRateLimit;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 
@@ -154,6 +155,7 @@ pub type TxExtension = (
 	frame_system::CheckEra<Runtime>,
 	frame_system::CheckNonce<Runtime>,
 	frame_system::CheckWeight<Runtime>,
+	pallet_rate_limiter::CheckRateLimit<Runtime>, // 🔒 CRITICAL: Rate limiting for spam protection
 	frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
 	frame_system::WeightReclaim<Runtime>,
 );
@@ -216,4 +218,7 @@ mod runtime {
 
 	#[runtime::pallet_index(5)]
 	pub type Sudo = pallet_sudo;
+
+	#[runtime::pallet_index(6)]
+	pub type RateLimiter = pallet_rate_limiter;
 }

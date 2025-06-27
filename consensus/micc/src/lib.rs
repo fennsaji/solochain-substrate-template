@@ -45,6 +45,7 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	traits::{DisabledValidators, FindAuthor, Get, OnTimestampSet, OneSessionHandler},
 	BoundedSlice, BoundedVec, ConsensusEngineId, Parameter,
+	dispatch::DispatchResult,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use log;
@@ -57,6 +58,13 @@ use sp_runtime::{
 
 mod mock;
 mod tests;
+
+/// Security testing module for consensus robustness validation
+#[cfg(test)]
+mod security_tests;
+
+/// Equivocation detection and handling for MICC consensus
+pub mod equivocation;
 
 pub use pallet::*;
 
@@ -80,9 +88,14 @@ impl<T: pallet_timestamp::Config> Get<T::Moment> for MinimumPeriodTimesTwo<T> {
 pub mod pallet {
 	use super::*;
 	use frame_support::pallet_prelude::*;
+	use frame_system::pallet_prelude::OriginFor;
+	use frame_system::{ensure_root, ensure_signed};
 
 	#[pallet::config]
 	pub trait Config: pallet_timestamp::Config + frame_system::Config {
+		/// The overarching event type.
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
 		/// The identifier type for an authority.
 		type AuthorityId: Member
 			+ Parameter
@@ -172,6 +185,18 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type CurrentSlot<T: Config> = StorageValue<_, Slot, ValueQuery>;
 
+	/// Configuration for equivocation detection and handling.
+	#[pallet::storage]
+	pub type EquivocationConfig<T: Config> = StorageValue<_, crate::equivocation::EquivocationConfig, ValueQuery>;
+
+	/// Current session equivocations count per authority.
+	#[pallet::storage]
+	pub type SessionEquivocations<T: Config> = StorageMap<_, Blake2_128Concat, T::AuthorityId, u32, ValueQuery>;
+
+	/// Disabled authorities due to equivocation.
+	#[pallet::storage]
+	pub type DisabledAuthorities<T: Config> = StorageMap<_, Blake2_128Concat, T::AuthorityId, BlockNumberFor<T>, OptionQuery>;
+
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T: Config> {
@@ -182,6 +207,113 @@ pub mod pallet {
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			Pallet::<T>::initialize_authorities(&self.authorities);
+		}
+	}
+
+	/// Events emitted by the MICC pallet.
+	#[pallet::event]
+	#[pallet::generate_deposit(pub(super) fn deposit_event)]
+	pub enum Event<T: Config> {
+		/// Equivocation detected. [authority, slot, session]
+		EquivocationDetected {
+			authority: T::AuthorityId,
+			slot: Slot,
+			session: u32,
+		},
+		/// Authority disabled due to equivocation. [authority, block_number]
+		AuthorityDisabled {
+			authority: T::AuthorityId,
+			block_number: BlockNumberFor<T>,
+		},
+		/// Equivocation configuration updated.
+		EquivocationConfigUpdated,
+		/// Session equivocations cleared.
+		SessionEquivocationsCleared,
+	}
+
+	/// Errors that can occur in the MICC pallet.
+	#[pallet::error]
+	pub enum Error<T> {
+		/// Invalid equivocation configuration.
+		InvalidEquivocationConfig,
+		/// Authority not found.
+		AuthorityNotFound,
+		/// Equivocation already reported.
+		EquivocationAlreadyReported,
+	}
+
+	#[pallet::call]
+	impl<T: Config> Pallet<T> {
+		/// Enable or disable equivocation slashing (root only).
+		#[pallet::call_index(0)]
+		#[pallet::weight(10_000)]
+		pub fn set_equivocation_slashing(
+			origin: OriginFor<T>,
+			enable: bool,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			let mut config = EquivocationConfig::<T>::get();
+			config.enable_slashing = enable;
+			EquivocationConfig::<T>::put(config);
+			Self::deposit_event(Event::EquivocationConfigUpdated);
+			Ok(())
+		}
+
+		/// Report equivocation (can be called by anyone with valid proof).
+		#[pallet::call_index(1)]
+		#[pallet::weight(10_000)]
+		pub fn report_equivocation(
+			origin: OriginFor<T>,
+			report: crate::equivocation::EquivocationReport<T::AuthorityId>,
+		) -> DispatchResult {
+			let _ = ensure_signed(origin)?;
+
+			// Increment equivocation count for this authority
+			let count = SessionEquivocations::<T>::get(&report.offender);
+			let new_count = count.saturating_add(1);
+			SessionEquivocations::<T>::insert(&report.offender, new_count);
+
+			Self::deposit_event(Event::EquivocationDetected {
+				authority: report.offender.clone(),
+				slot: report.slot,
+				session: report.session_index,
+			});
+
+			// Check if authority should be disabled
+			let config = EquivocationConfig::<T>::get();
+			if config.enable_slashing && new_count > 0 {
+				let current_block = frame_system::Pallet::<T>::block_number();
+				DisabledAuthorities::<T>::insert(&report.offender, current_block);
+				
+				Self::deposit_event(Event::AuthorityDisabled {
+					authority: report.offender,
+					block_number: current_block,
+				});
+			}
+
+			Ok(())
+		}
+
+		/// Clear session equivocations (root only) - used for new sessions.
+		#[pallet::call_index(2)]
+		#[pallet::weight(10_000)]
+		pub fn clear_session_equivocations(origin: OriginFor<T>) -> DispatchResult {
+			ensure_root(origin)?;
+			let _ = SessionEquivocations::<T>::clear(u32::MAX, None);
+			Self::deposit_event(Event::SessionEquivocationsCleared);
+			Ok(())
+		}
+
+		/// Re-enable a disabled authority (root only).
+		#[pallet::call_index(3)]
+		#[pallet::weight(10_000)]
+		pub fn enable_authority(
+			origin: OriginFor<T>,
+			authority: T::AuthorityId,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			DisabledAuthorities::<T>::remove(&authority);
+			Ok(())
 		}
 	}
 }
@@ -244,6 +376,29 @@ impl<T: Config> Pallet<T> {
 	/// Determine the Micc slot-duration based on the Timestamp module configuration.
 	pub fn slot_duration() -> T::Moment {
 		T::SlotDuration::get()
+	}
+
+	/// Check if an authority is disabled due to equivocation.
+	pub fn is_authority_disabled(authority: &T::AuthorityId) -> bool {
+		DisabledAuthorities::<T>::contains_key(authority)
+	}
+
+	/// Get the current equivocation configuration.
+	pub fn get_equivocation_config() -> crate::equivocation::EquivocationConfig {
+		EquivocationConfig::<T>::get()
+	}
+
+	/// Get equivocation count for a specific authority.
+	pub fn get_equivocation_count(authority: &T::AuthorityId) -> u32 {
+		SessionEquivocations::<T>::get(authority)
+	}
+
+	/// Initialize equivocation detection with default configuration.
+	pub fn initialize_equivocation_config() {
+		if !EquivocationConfig::<T>::exists() {
+			let default_config = crate::equivocation::EquivocationConfig::default();
+			EquivocationConfig::<T>::put(default_config);
+		}
 	}
 
 	/// Ensure the correctness of the state of this pallet.

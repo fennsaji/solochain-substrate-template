@@ -27,6 +27,7 @@ pallet-balances.workspace = true
 pallet-grandpa.workspace = true
 pallet-sudo.workspace = true
 pallet-timestamp.workspace = true
+pallet-rate-limiter.workspace = true
 scale-info = { features = ["derive", "serde"], workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 sp-api.workspace = true
@@ -64,6 +65,7 @@ std = [
 	"pallet-grandpa/std",
 	"pallet-sudo/std",
 	"pallet-timestamp/std",
+	"pallet-rate-limiter/std",
 	"scale-info/std",
 	"serde_json/std",
 	"sp-api/std",
@@ -92,6 +94,7 @@ runtime-benchmarks = [
 	"pallet-grandpa/runtime-benchmarks",
 	"pallet-sudo/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
+	"pallet-rate-limiter/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 
@@ -105,6 +108,7 @@ try-runtime = [
 	"pallet-grandpa/try-runtime",
 	"pallet-sudo/try-runtime",
 	"pallet-timestamp/try-runtime",
+	"pallet-rate-limiter/try-runtime",
 	"sp-runtime/try-runtime",
 ]
 

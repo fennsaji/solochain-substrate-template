@@ -5906,6 +5906,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-rate-limiter"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-session"
 version = "40.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9417,6 +9434,7 @@ dependencies = [
  "pallet-balances",
  "pallet-grandpa",
  "pallet-micc",
+ "pallet-rate-limiter",
  "pallet-sudo",
  "pallet-timestamp",
  "parity-scale-codec",
