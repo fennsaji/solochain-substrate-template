@@ -65,6 +65,33 @@ pub struct RateLimit {
     pub last_reset_block: u32,
 }
 
+/// Per-account transaction pool usage tracking for enhanced resource limits
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct AccountPoolData {
+    /// Number of pending transactions in pool
+    pub pending_transactions: u32,
+    /// Total bytes used by pending transactions  
+    pub total_bytes_used: u32,
+    /// Block number of last transaction
+    pub last_transaction_block: u32,
+    /// Transactions submitted in current minute window
+    pub transactions_per_minute: u32,
+    /// Block number when minute counter was last reset
+    pub minute_reset_block: u32,
+}
+
+impl Default for AccountPoolData {
+    fn default() -> Self {
+        Self {
+            pending_transactions: 0,
+            total_bytes_used: 0,
+            last_transaction_block: 0,
+            transactions_per_minute: 0,
+            minute_reset_block: 0,
+        }
+    }
+}
+
 impl Default for RateLimit {
     fn default() -> Self {
         Self {
@@ -104,6 +131,18 @@ pub mod pallet {
         /// Minimum balance required to submit transactions (spam protection)
         #[pallet::constant]
         type MinimumBalance: Get<<Self::Currency as Currency<Self::AccountId>>::Balance>;
+
+        /// Maximum pending transactions per account in the pool
+        #[pallet::constant]
+        type MaxTransactionsPerAccount: Get<u32>;
+
+        /// Maximum bytes per account in the transaction pool
+        #[pallet::constant]
+        type MaxBytesPerAccount: Get<u32>;
+
+        /// Maximum transactions per minute per account (optimized for 500ms blocks)
+        #[pallet::constant]
+        type MaxTransactionsPerMinute: Get<u32>;
     }
 
     /// Rate limits for accounts
@@ -130,6 +169,17 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn is_paused)]
     pub type IsPaused<T: Config> = StorageValue<_, bool, ValueQuery>;
+
+    /// Per-account pool usage tracking for enhanced resource limits
+    #[pallet::storage]
+    #[pallet::getter(fn account_pool_usage)]
+    pub type AccountPoolUsage<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        AccountPoolData,
+        ValueQuery,
+    >;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -163,6 +213,23 @@ pub mod pallet {
             required: <T::Currency as Currency<T::AccountId>>::Balance,
             actual: <T::Currency as Currency<T::AccountId>>::Balance,
         },
+        /// Account pool limits exceeded [account, pending_count, byte_usage]
+        AccountPoolLimitExceeded {
+            account: T::AccountId,
+            pending_count: u32,
+            byte_usage: u32,
+        },
+        /// Minute rate limit exceeded [account, current_rate, limit]
+        MinuteRateLimitExceeded {
+            account: T::AccountId,
+            current_rate: u32,
+            limit: u32,
+        },
+        /// Transaction pool metrics updated [total_pending, total_bytes]
+        PoolMetricsUpdated {
+            total_pending: u32,
+            total_bytes: u32,
+        },
     }
 
     #[pallet::error]
@@ -181,6 +248,12 @@ pub mod pallet {
         InsufficientBalance,
         /// Invalid rate limit parameters
         InvalidRateLimit,
+        /// Too many pending transactions for this account
+        TooManyPendingTransactions,
+        /// Account pool byte limit exceeded
+        AccountPoolLimitExceeded,
+        /// Per-minute transaction rate limit exceeded
+        MinuteRateLimitExceeded,
     }
 
     #[pallet::call]
@@ -281,6 +354,87 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// Enhanced transaction pool validation for per-account limits
+        pub fn can_submit_transaction(
+            who: &T::AccountId, 
+            transaction_bytes: u32
+        ) -> Result<(), Error<T>> {
+            // Check emergency pause
+            if Self::is_paused() {
+                return Err(Error::<T>::SystemPaused);
+            }
+
+            // Check minimum balance requirement
+            let balance = T::Currency::free_balance(who);
+            let minimum = T::MinimumBalance::get();
+            if balance < minimum {
+                Self::deposit_event(Event::InsufficientBalance {
+                    account: who.clone(),
+                    required: minimum,
+                    actual: balance,
+                });
+                return Err(Error::<T>::InsufficientBalance);
+            }
+
+            let current_block = <frame_system::Pallet<T>>::block_number().saturated_into::<u32>();
+            let mut usage = Self::account_pool_usage(who);
+            
+            // Reset minute counter if needed (120 blocks = 1 minute with 500ms blocks)
+            let blocks_per_minute = 120u32;
+            if current_block.saturating_sub(usage.minute_reset_block) >= blocks_per_minute {
+                usage.transactions_per_minute = 0;
+                usage.minute_reset_block = current_block;
+            }
+            
+            // Check per-account pending transaction limit
+            if usage.pending_transactions >= T::MaxTransactionsPerAccount::get() {
+                Self::deposit_event(Event::AccountPoolLimitExceeded {
+                    account: who.clone(),
+                    pending_count: usage.pending_transactions,
+                    byte_usage: usage.total_bytes_used,
+                });
+                return Err(Error::<T>::TooManyPendingTransactions);
+            }
+            
+            // Check per-account byte limit
+            if usage.total_bytes_used.saturating_add(transaction_bytes) >= T::MaxBytesPerAccount::get() {
+                Self::deposit_event(Event::AccountPoolLimitExceeded {
+                    account: who.clone(),
+                    pending_count: usage.pending_transactions,
+                    byte_usage: usage.total_bytes_used,
+                });
+                return Err(Error::<T>::AccountPoolLimitExceeded);
+            }
+            
+            // Check per-minute transaction rate (important for 500ms blocks)
+            if usage.transactions_per_minute >= T::MaxTransactionsPerMinute::get() {
+                Self::deposit_event(Event::MinuteRateLimitExceeded {
+                    account: who.clone(),
+                    current_rate: usage.transactions_per_minute,
+                    limit: T::MaxTransactionsPerMinute::get(),
+                });
+                return Err(Error::<T>::MinuteRateLimitExceeded);
+            }
+            
+            // Update usage tracking
+            usage.pending_transactions = usage.pending_transactions.saturating_add(1);
+            usage.total_bytes_used = usage.total_bytes_used.saturating_add(transaction_bytes);
+            usage.last_transaction_block = current_block;
+            usage.transactions_per_minute = usage.transactions_per_minute.saturating_add(1);
+            
+            AccountPoolUsage::<T>::insert(who, usage);
+            
+            Ok(())
+        }
+
+        /// Clean up pool usage when transaction is removed from pool
+        pub fn on_transaction_removed(who: &T::AccountId, transaction_bytes: u32) {
+            let mut usage = Self::account_pool_usage(who);
+            usage.pending_transactions = usage.pending_transactions.saturating_sub(1);
+            usage.total_bytes_used = usage.total_bytes_used.saturating_sub(transaction_bytes);
+            AccountPoolUsage::<T>::insert(who, usage);
+        }
+
         /// Check if an account can submit a transaction based on rate limits
         pub fn check_rate_limit(account: &T::AccountId) -> DispatchResult {
             // Check emergency pause
@@ -407,6 +561,53 @@ pub mod pallet {
             }
 
             rate_limit
+        }
+
+        /// Get current pool usage for an account (for metrics)
+        pub fn get_account_pool_data(account: &T::AccountId) -> AccountPoolData {
+            Self::account_pool_usage(account)
+        }
+
+        /// Get global pool metrics
+        pub fn get_pool_metrics() -> (u32, u32, u32) {
+            let mut total_pending = 0u32;
+            let mut total_bytes = 0u32;
+            let mut active_accounts = 0u32;
+
+            // Iterate over all accounts with pool usage
+            for (_, data) in AccountPoolUsage::<T>::iter() {
+                if data.pending_transactions > 0 {
+                    active_accounts = active_accounts.saturating_add(1);
+                    total_pending = total_pending.saturating_add(data.pending_transactions);
+                    total_bytes = total_bytes.saturating_add(data.total_bytes_used);
+                }
+            }
+
+            (total_pending, total_bytes, active_accounts)
+        }
+
+        /// Update pool metrics (can be called periodically by offchain worker)
+        pub fn update_pool_metrics() {
+            let (total_pending, total_bytes, _active_accounts) = Self::get_pool_metrics();
+            
+            Self::deposit_event(Event::PoolMetricsUpdated {
+                total_pending,
+                total_bytes,
+            });
+        }
+
+        /// Check if system is under attack (high resource usage)
+        pub fn is_under_attack() -> bool {
+            let (total_pending, total_bytes, active_accounts) = Self::get_pool_metrics();
+            
+            // Define attack thresholds
+            let max_safe_pending = 1000u32;
+            let max_safe_bytes = 5 * 1024 * 1024u32; // 5MB
+            let max_safe_accounts = 100u32;
+            
+            total_pending > max_safe_pending || 
+            total_bytes > max_safe_bytes ||
+            active_accounts > max_safe_accounts
         }
     }
 }

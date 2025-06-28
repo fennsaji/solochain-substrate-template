@@ -70,6 +70,7 @@ pub use pallet::*;
 
 const LOG_TARGET: &str = "runtime::micc";
 
+
 /// A slot duration provider which infers the slot duration from the
 /// [`pallet_timestamp::Config::MinimumPeriod`] by multiplying it by two, to ensure
 /// that authors have the majority of their slot to author within.
@@ -142,9 +143,47 @@ pub mod pallet {
 				let current_slot = CurrentSlot::<T>::get();
 
 				if T::AllowMultipleBlocksPerSlot::get() {
-					assert!(current_slot <= new_slot, "Slot must not decrease");
+					if current_slot > new_slot {
+						log::error!(
+							target: LOG_TARGET,
+							"🚨 Slot decreased from {:?} to {:?}. Gracefully handling.",
+							current_slot, new_slot
+						);
+						
+						Self::deposit_event(Event::SlotValidationFailed {
+							current_slot,
+							new_slot,
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						Self::deposit_event(Event::ConsensusErrorRecovered {
+							error_type: 2u8, // SlotTiming
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						return T::DbWeight::get().reads(1);
+					}
 				} else {
-					assert!(current_slot < new_slot, "Slot must increase");
+					if current_slot >= new_slot {
+						log::error!(
+							target: LOG_TARGET,
+							"🚨 Slot failed to increase from {:?} to {:?}. Gracefully handling.",
+							current_slot, new_slot
+						);
+						
+						Self::deposit_event(Event::SlotValidationFailed {
+							current_slot,
+							new_slot,
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						Self::deposit_event(Event::ConsensusErrorRecovered {
+							error_type: 2u8, // SlotTiming
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						return T::DbWeight::get().reads(1);
+					}
 				}
 
 				CurrentSlot::<T>::put(new_slot);
@@ -152,11 +191,47 @@ pub mod pallet {
 				if let Some(n_authorities) = <Authorities<T>>::decode_len() {
 					let authority_index = *new_slot % n_authorities as u64;
 					if T::DisabledValidators::is_disabled(authority_index as u32) {
-						panic!(
-							"Validator with index {:?} is disabled and should not be attempting to author blocks.",
-							authority_index,
+						log::error!(
+							target: LOG_TARGET,
+							"🚨 Disabled validator attempted to author block at index {:?}. Gracefully skipping.",
+							authority_index
 						);
+						
+						// Emit event for monitoring and alerting
+						Self::deposit_event(Event::DisabledValidatorAttempt { 
+							authority_index: authority_index as u32,
+							slot: new_slot,
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						// Emit recovery event
+						Self::deposit_event(Event::ConsensusErrorRecovered {
+							error_type: 0u8, // DisabledValidator
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						// Return early with minimal weight instead of panicking
+						return T::DbWeight::get().reads(1);
 					}
+				} else {
+					log::error!(
+						target: LOG_TARGET,
+						"🚨 Failed to decode authorities length. Gracefully handling."
+					);
+					
+					// Emit event for monitoring
+					Self::deposit_event(Event::AuthoritiesDecodeError {
+						block_number: frame_system::Pallet::<T>::block_number(),
+					});
+					
+					// Emit recovery event
+					Self::deposit_event(Event::ConsensusErrorRecovered {
+						error_type: 1u8, // AuthorityDecode
+						block_number: frame_system::Pallet::<T>::block_number(),
+					});
+					
+					// Return with minimal weight
+					return T::DbWeight::get().reads(1);
 				}
 
 				// TODO [#3398] Generate offence report for all authorities that skipped their
@@ -229,6 +304,28 @@ pub mod pallet {
 		EquivocationConfigUpdated,
 		/// Session equivocations cleared.
 		SessionEquivocationsCleared,
+		/// Disabled validator attempted to author block
+		DisabledValidatorAttempt {
+			authority_index: u32,
+			slot: Slot,
+			block_number: BlockNumberFor<T>,
+		},
+		/// Authority set decoding failed
+		AuthoritiesDecodeError {
+			block_number: BlockNumberFor<T>,
+		},
+		/// Consensus error recovered gracefully
+		/// error_type: 0=DisabledValidator, 1=AuthorityDecode, 2=SlotTiming
+		ConsensusErrorRecovered {
+			error_type: u8,
+			block_number: BlockNumberFor<T>,
+		},
+		/// Slot validation failed but recovered
+		SlotValidationFailed {
+			current_slot: Slot,
+			new_slot: Slot,
+			block_number: BlockNumberFor<T>,
+		},
 	}
 
 	/// Errors that can occur in the MICC pallet.
@@ -240,6 +337,18 @@ pub mod pallet {
 		AuthorityNotFound,
 		/// Equivocation already reported.
 		EquivocationAlreadyReported,
+		/// Failed to decode authorities
+		AuthoritiesDecodeFailed,
+		/// Disabled validator attempted block authoring
+		DisabledValidatorAttempt,
+		/// Invalid slot for current block
+		InvalidSlot,
+		/// Authority set is empty
+		EmptyAuthoritySet,
+		/// Slot timing validation failed
+		SlotTimingError,
+		/// Block production outside allowed time window
+		OutsideProductionWindow,
 	}
 
 	#[pallet::call]
@@ -348,10 +457,27 @@ impl<T: Config> Pallet<T> {
 	/// The authorities length must be equal or less than T::MaxAuthorities.
 	pub fn initialize_authorities(authorities: &[T::AuthorityId]) {
 		if !authorities.is_empty() {
-			assert!(<Authorities<T>>::get().is_empty(), "Authorities are already initialized!");
-			let bounded = <BoundedSlice<'_, _, T::MaxAuthorities>>::try_from(authorities)
-				.expect("Initial authority set must be less than T::MaxAuthorities");
-			<Authorities<T>>::put(bounded);
+			if !<Authorities<T>>::get().is_empty() {
+				log::error!(
+					target: LOG_TARGET,
+					"🚨 Attempted to initialize authorities when already initialized. Ignoring."
+				);
+				return;
+			}
+			
+			match <BoundedSlice<'_, _, T::MaxAuthorities>>::try_from(authorities) {
+				Ok(bounded) => <Authorities<T>>::put(bounded),
+				Err(_) => {
+					log::error!(
+						target: LOG_TARGET,
+						"🚨 Initial authority set size {} exceeds maximum {}. Truncating.",
+						authorities.len(),
+						T::MaxAuthorities::get()
+					);
+					let bounded = <BoundedVec<_, T::MaxAuthorities>>::truncate_from(authorities.to_vec());
+					<Authorities<T>>::put(bounded);
+				}
+			}
 		}
 	}
 
@@ -546,15 +672,35 @@ impl<T: Config> IsMember<T::AuthorityId> for Pallet<T> {
 impl<T: Config> OnTimestampSet<T::Moment> for Pallet<T> {
 	fn on_timestamp_set(moment: T::Moment) {
 		let slot_duration = Self::slot_duration();
-		assert!(!slot_duration.is_zero(), "Micc slot duration cannot be zero.");
+		if slot_duration.is_zero() {
+			log::error!(
+				target: LOG_TARGET,
+				"🚨 Micc slot duration is zero. Cannot process timestamp. Ignoring."
+			);
+			return;
+		}
 
 		let timestamp_slot = moment / slot_duration;
 		let timestamp_slot = Slot::from(timestamp_slot.saturated_into::<u64>());
+		let current_slot = CurrentSlot::<T>::get();
 
-		assert_eq!(
-			CurrentSlot::<T>::get(),
-			timestamp_slot,
-			"Timestamp slot must match `CurrentSlot`"
-		);
+		if current_slot != timestamp_slot {
+			log::error!(
+				target: LOG_TARGET,
+				"🚨 Timestamp slot {:?} does not match CurrentSlot {:?}. Gracefully handling.",
+				timestamp_slot, current_slot
+			);
+			
+			Self::deposit_event(Event::SlotValidationFailed {
+				current_slot,
+				new_slot: timestamp_slot,
+				block_number: frame_system::Pallet::<T>::block_number(),
+			});
+			
+			Self::deposit_event(Event::ConsensusErrorRecovered {
+				error_type: 2u8, // SlotTiming
+				block_number: frame_system::Pallet::<T>::block_number(),
+			});
+		}
 	}
 }

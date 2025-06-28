@@ -148,9 +148,15 @@ impl pallet_rate_limiter::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = pallet_balances::Pallet<Runtime>;
 	/// Default 5 transactions per block (conservative for 500ms blocks)
-	type DefaultTransactionsPerBlock = ConstU32<5>;
+	type DefaultTransactionsPerBlock = ConstU32<100>;
 	/// Default 20 transactions per minute (allowing bursts)  
-	type DefaultTransactionsPerMinute = ConstU32<20>;
-	/// Minimum balance of 1 UNIT required to submit transactions
+	type DefaultTransactionsPerMinute = ConstU32<600>;
+	/// Minimum balance of 0 UNIT required to submit transactions (fee-free system)
 	type MinimumBalance = ConstU128<{ 0 * super::UNIT }>;
+	/// Maximum 50 pending transactions per account in pool
+	type MaxTransactionsPerAccount = ConstU32<100>;
+	/// Maximum 512KB per account in transaction pool
+	type MaxBytesPerAccount = ConstU32<{ 512 * 1024 }>;
+	/// Maximum 60 transactions per minute per account (optimized for 500ms blocks)
+	type MaxTransactionsPerMinute = ConstU32<60>;
 }

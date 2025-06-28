@@ -97,7 +97,24 @@ where
             return Ok((Default::default(), Default::default(), origin));
         }
 
-        // Check rate limits for the account
+        // Get transaction size for pool limits
+        let transaction_bytes = call.encode().len() as u32;
+        
+        // Check enhanced pool limits first
+        if let Err(error) = Pallet::<T>::can_submit_transaction(&who, transaction_bytes) {
+            log::warn!(
+                target: "rate-limiter",
+                "❌ Pool limit exceeded for account: {:?}, bytes: {}, error: {:?}",
+                who, transaction_bytes, error
+            );
+            
+            // Convert to appropriate InvalidTransaction error - all resource limit errors
+            let invalid_error = InvalidTransaction::ExhaustsResources;
+            
+            return Err(TransactionValidityError::Invalid(invalid_error));
+        }
+
+        // Check traditional rate limits for the account
         match Pallet::<T>::check_rate_limit(&who) {
             Ok(()) => {
                 // Rate limit check passed
@@ -176,40 +193,52 @@ where
         pre: Self::Pre,
         _info: &DispatchInfoOf<T::RuntimeCall>,
         _post_info: &PostDispatchInfoOf<T::RuntimeCall>,
-        _len: usize,
+        len: usize,
         result: &sp_runtime::DispatchResult,
     ) -> Result<Weight, TransactionValidityError> {
-        // Only record successful transactions to prevent rate limit evasion through failures
-        if let (Ok(_), Some(account_id)) = (result, pre) {
-            // Record the transaction for rate limiting
-            match Pallet::<T>::record_transaction(&account_id) {
-                Ok(()) => {
+        // Note: Transaction size estimation (better to get from context if available)
+        let transaction_bytes = len as u32;
+        
+        if let Some(account_id) = pre {
+            match result {
+                Ok(_) => {
+                    // Record successful transaction for rate limiting
+                    match Pallet::<T>::record_transaction(&account_id) {
+                        Ok(()) => {
+                            log::debug!(
+                                target: "rate-limiter",
+                                "✅ Successfully recorded transaction for account: {:?}",
+                                account_id
+                            );
+                        },
+                        Err(error) => {
+                            log::warn!(
+                                target: "rate-limiter",
+                                "❌ Failed to record transaction for account: {:?}, error: {:?}",
+                                account_id, error
+                            );
+                            // Don't fail the transaction if recording fails, just log it
+                        }
+                    }
+                    
+                    // Transaction was successful, pool tracking already updated in can_submit_transaction
+                    Ok(Weight::from_parts(10_000, 0))
+                },
+                Err(_) => {
+                    // Transaction failed - clean up pool usage since it won't be in pool anymore  
+                    Pallet::<T>::on_transaction_removed(&account_id, transaction_bytes);
+                    
                     log::debug!(
-                        target: "rate-limiter",
-                        "✅ Successfully recorded transaction for account: {:?}",
+                        target: "rate-limiter", 
+                        "Transaction failed, cleaned up pool usage for account: {:?}",
                         account_id
                     );
-                },
-                Err(error) => {
-                    log::warn!(
-                        target: "rate-limiter",
-                        "❌ Failed to record transaction for account: {:?}, error: {:?}",
-                        account_id, error
-                    );
-                    // Don't fail the transaction if recording fails, just log it
+                    
+                    Ok(Weight::from_parts(5_000, 0))
                 }
             }
-            
-            // Return weight for the recording operation
-            Ok(Weight::from_parts(10_000, 0))
         } else {
-            // Transaction failed or was unsigned - no recording needed
-            if result.is_err() {
-                log::debug!(
-                    target: "rate-limiter", 
-                    "Transaction failed, not recording for rate limiting"
-                );
-            }
+            // Unsigned transaction - no cleanup needed
             Ok(Weight::from_parts(0, 0))
         }
     }

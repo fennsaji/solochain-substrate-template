@@ -64,6 +64,10 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
 
 	let select_chain = sc_consensus::LongestChain::new(backend.clone());
 
+	// Enhanced transaction pool configuration for 500ms blocks
+	// Note: Resource limits are primarily enforced by our rate limiter pallet
+	// which provides per-account transaction limits and byte limits optimized
+	// for the 500ms block times and higher throughput requirements
 	let transaction_pool = Arc::from(
 		sc_transaction_pool::Builder::new(
 			task_manager.spawn_essential_handle(),
