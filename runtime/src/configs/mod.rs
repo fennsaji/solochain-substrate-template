@@ -1,3 +1,8 @@
+//! Runtime configuration module with environment-specific parameters.
+//!
+//! This module provides the core runtime configuration along with environment-specific
+//! parameter overrides for development, staging, and production deployments.
+
 // This is free and unencumbered software released into the public domain.
 //
 // Anyone is free to copy, modify, publish, use, compile, sell, or
@@ -23,6 +28,8 @@
 //
 // For more information, please refer to <http://unlicense.org>
 
+pub mod environments;
+
 // Substrate and Polkadot dependencies
 use frame_support::{
 	derive_impl, parameter_types,
@@ -44,24 +51,32 @@ use super::{
 	System, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
+// Import environment-specific configuration
+use environments::*;
+
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
 parameter_types! {
-	pub const BlockHashCount: BlockNumber = 2400;
+	/// Environment-specific block hash count
+	/// Development: 250 blocks (2 minutes at 500ms)
+	/// Local: 1200 blocks (10 minutes)  
+	/// Staging/Production: 2400+ blocks (20+ minutes)
+	pub const BlockHashCount: BlockNumber = CONSENSUS_BLOCK_HASH_COUNT;
 	pub const Version: RuntimeVersion = VERSION;
 
 	/// We allow for 2 seconds of compute with a 6 second average block time.
+	/// Note: Comment reflects original 6s blocks, but we use 500ms blocks
 	pub RuntimeBlockWeights: BlockWeights = BlockWeights::with_sensible_defaults(
 		Weight::from_parts(WEIGHT_REF_TIME_PER_SECOND / 2, u64::MAX),
 		NORMAL_DISPATCH_RATIO,
 	);
 	pub RuntimeBlockLength: BlockLength = BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
-	/// SS58 address prefix for the solochain
-	/// 42 is the generic Substrate prefix (used for development)
+	
+	/// Environment-specific SS58 address prefix
+	/// Development/Local: 42 (generic Substrate prefix)
+	/// Staging/Production: Unique registered prefix (TODO: register and update)
 	/// For production, register a unique prefix at: https://github.com/paritytech/ss58-registry
-	/// Suggested: Apply for prefix in range 1000-9999 for private networks
-	/// Example production prefix: 2048 (currently unregistered, should be claimed)
-	pub const SS58Prefix: u8 = 42;
+	pub const SS58Prefix: u8 = NETWORK_SS58_PREFIX;
 }
 
 /// The default types are being injected by [`derive_impl`](`frame_support::derive_impl`) from
@@ -89,17 +104,22 @@ impl frame_system::Config for Runtime {
 	type Version = Version;
 	/// The data to be stored in an account.
 	type AccountData = pallet_balances::AccountData<Balance>;
-	/// This is used as an identifier of the chain. 42 is the generic substrate prefix.
+	/// This is used as an identifier of the chain. Environment-specific prefix.
 	type SS58Prefix = SS58Prefix;
-	type MaxConsumers = frame_support::traits::ConstU32<16>;
+	/// Environment-specific max consumers (16 for dev/local, 32 for staging/production)
+	type MaxConsumers = frame_support::traits::ConstU32<NETWORK_MAX_CONSUMERS>;
 }
 
 impl pallet_micc::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type AuthorityId = MiccId;
 	type DisabledValidators = ();
-	type MaxAuthorities = ConstU32<32>;
-	type AllowMultipleBlocksPerSlot = ConstBool<false>;
+	/// Environment-specific max authorities
+	/// Development: 10, Local: 5, Staging: 21, Production: 32
+	type MaxAuthorities = ConstU32<CONSENSUS_MAX_AUTHORITIES>;
+	/// Environment-specific multiple blocks per slot
+	/// Development: true (flexible), Others: false (secure)
+	type AllowMultipleBlocksPerSlot = ConstBool<CONSENSUS_ALLOW_MULTIPLE_BLOCKS>;
 	type SlotDuration = pallet_micc::MinimumPeriodTimesTwo<Runtime>;
 }
 
@@ -107,7 +127,8 @@ impl pallet_grandpa::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 
 	type WeightInfo = ();
-	type MaxAuthorities = ConstU32<32>;
+	/// Environment-specific max authorities (matches MICC configuration)
+	type MaxAuthorities = ConstU32<CONSENSUS_MAX_AUTHORITIES>;
 	type MaxNominators = ConstU32<0>;
 	type MaxSetIdSessionEntries = ConstU64<0>;
 
@@ -152,16 +173,21 @@ impl pallet_sudo::Config for Runtime {
 impl pallet_rate_limiter::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = pallet_balances::Pallet<Runtime>;
-	/// Default 5 transactions per block (conservative for 500ms blocks)
-	type DefaultTransactionsPerBlock = ConstU32<100>;
-	/// Default 20 transactions per minute (allowing bursts)  
-	type DefaultTransactionsPerMinute = ConstU32<600>;
+	/// Environment-specific default transactions per block
+	/// Development: 1000, Local: 500, Staging: 200, Production: 100
+	type DefaultTransactionsPerBlock = ConstU32<RATE_LIMIT_DEFAULT_TXS_PER_BLOCK>;
+	/// Environment-specific default transactions per minute
+	/// Development: 6000, Local: 3000, Staging: 1200, Production: 600
+	type DefaultTransactionsPerMinute = ConstU32<RATE_LIMIT_DEFAULT_TXS_PER_MINUTE>;
 	/// Minimum balance of 0 UNIT required to submit transactions (fee-free system)
 	type MinimumBalance = ConstU128<{ 0 * super::UNIT }>;
-	/// Maximum 50 pending transactions per account in pool
-	type MaxTransactionsPerAccount = ConstU32<100>;
-	/// Maximum 512KB per account in transaction pool
-	type MaxBytesPerAccount = ConstU32<{ 512 * 1024 }>;
-	/// Maximum 60 transactions per minute per account (optimized for 500ms blocks)
-	type MaxTransactionsPerMinute = ConstU32<60>;
+	/// Environment-specific max transactions per account in pool
+	/// Development: 1000, Local: 500, Staging: 200, Production: 100
+	type MaxTransactionsPerAccount = ConstU32<RATE_LIMIT_MAX_TXS_PER_ACCOUNT>;
+	/// Environment-specific max bytes per account in transaction pool
+	/// Development: 2MB, Local: 1MB, Staging/Production: 512KB
+	type MaxBytesPerAccount = ConstU32<RATE_LIMIT_MAX_BYTES_PER_ACCOUNT>;
+	/// Environment-specific max transactions per minute per account
+	/// Development: 600, Local: 300, Staging: 120, Production: 60
+	type MaxTransactionsPerMinute = ConstU32<RATE_LIMIT_MAX_TXS_PER_MINUTE>;
 }

@@ -93,6 +93,11 @@ runtime-benchmarks = [
 	"solochain-template-runtime/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
+
+# Environment-specific features for configuration tuning
+production = ["solochain-template-runtime/production"]
+staging = ["solochain-template-runtime/staging"]
+local-testnet = ["solochain-template-runtime/local-testnet"]
 # Enable features that allow the runtime to be tried and debugged. Name might be subject to change
 # in the near future.
 try-runtime = [
