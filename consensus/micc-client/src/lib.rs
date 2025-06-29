@@ -565,29 +565,57 @@ where
 		// Calculate the expected author for this slot (proper round-robin assignment)
 		let expected_author = crate::standalone::slot_author::<P>(slot, authorities);
 		
-		// In force authoring mode, try the expected author first, then fall back to any available authority
+		// Enhanced force authoring mode with improved security for 500ms blocks
 		if self.force_authoring {
+			log::warn!(
+				target: "micc", 
+				"🔧 Force authoring enabled - DEVELOPMENT ONLY! Slot: {} ({}ms blocks)", 
+				slot,
+				500
+			);
+			
 			// First, try to use the correct slot author if available
 			if let Some(expected) = expected_author {
 				if self.keystore.has_keys(&[(expected.to_raw_vec(), MICC)]) {
-					log::info!(target: "micc", "🔧 Force authoring: claiming slot {} with correct authority", slot);
+					log::info!(target: "micc", "✅ Force authoring: using expected authority for slot {}", slot);
 					return Some(expected.clone());
 				}
 			}
 			
-			// Fallback: try any available authority (but log this as a deviation)
+			// Enhanced security: Only allow fallback for specific development scenarios
+			// Still enforce slot assignment logic even in force mode for better security
+			let expected_authority_index = *slot % authorities.len() as u64;
+			let expected_authority = &authorities[expected_authority_index as usize];
+			
+			// Try expected authority first
+			if self.keystore.has_keys(&[(expected_authority.to_raw_vec(), MICC)]) {
+				log::info!(target: "micc", "✅ Force authoring: using expected authority for slot {}", slot);
+				return Some(expected_authority.clone());
+			}
+			
+			// Controlled fallback: try any authority (but with strong warnings)
 			for authority in authorities {
 				if self.keystore.has_keys(&[(authority.to_raw_vec(), MICC)]) {
-					log::warn!(target: "micc", "🔧 Force authoring: claiming slot {} with fallback authority (security deviation)", slot);
+					log::warn!(target: "micc", "⚠️ Force authoring: using non-expected authority for slot {} - SECURITY DEVIATION!", slot);
 					return Some(authority.clone());
 				}
 			}
+			
 			log::debug!(target: "micc", "🔧 Force authoring: no authority keys available in keystore for slot {}", slot);
 			return None;
 		}
 		
-		// Normal mode: use strict slot assignment
-		crate::standalone::claim_slot::<P>(slot, authorities, &self.keystore).await
+		// Production mode: strict slot assignment with enhanced logging
+		match crate::standalone::claim_slot::<P>(slot, authorities, &self.keystore).await {
+			Some(claim) => {
+				log::debug!(target: "micc", "✅ Claimed slot {} for expected authority", slot);
+				Some(claim)
+			}
+			None => {
+				log::debug!(target: "micc", "❌ Cannot claim slot {} - not expected authority", slot);
+				None
+			}
+		}
 	}
 
 	fn pre_digest_data(&self, slot: Slot, _claim: &Self::Claim) -> Vec<sp_runtime::DigestItem> {

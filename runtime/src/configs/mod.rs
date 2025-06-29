@@ -56,6 +56,11 @@ parameter_types! {
 		NORMAL_DISPATCH_RATIO,
 	);
 	pub RuntimeBlockLength: BlockLength = BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
+	/// SS58 address prefix for the solochain
+	/// 42 is the generic Substrate prefix (used for development)
+	/// For production, register a unique prefix at: https://github.com/paritytech/ss58-registry
+	/// Suggested: Apply for prefix in range 1000-9999 for private networks
+	/// Example production prefix: 2048 (currently unregistered, should be claimed)
 	pub const SS58Prefix: u8 = 42;
 }
 
