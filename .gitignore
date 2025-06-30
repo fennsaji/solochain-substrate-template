@@ -1,2 +1,6 @@
 target/
 tmp/
+node_modules/
+stress_metrics/
+tps_monitoring_results/
+*.log
