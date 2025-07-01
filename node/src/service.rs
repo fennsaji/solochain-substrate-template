@@ -155,8 +155,12 @@ pub fn new_full<
 	let metrics = N::register_notification_metrics(config.prometheus_registry());
 
 	let peer_store_handle = net_config.peer_store_handle();
+	let genesis_hash = client.block_hash(0)
+		.ok()
+		.flatten()
+		.ok_or_else(|| sc_service::Error::Other("Genesis block not found".into()))?;
 	let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
-		&client.block_hash(0).ok().flatten().expect("Genesis block exists; qed"),
+		&genesis_hash,
 		&config.chain_spec,
 	);
 	let (grandpa_protocol_config, grandpa_notification_service) =

@@ -95,11 +95,11 @@ impl RateLimitParams {
             },
             Environment::Production => Self {
                 // Production: Conservative limits for security and performance
-                default_transactions_per_block: 100,
-                default_transactions_per_minute: 600,
-                max_transactions_per_account: 100,
+                default_transactions_per_block: 50,
+                default_transactions_per_minute: 300,
+                max_transactions_per_account: 50,
                 max_bytes_per_account: 512 * 1024, // 512KB
-                max_transactions_per_minute: 60,
+                max_transactions_per_minute: 30,
             },
         }
     }
@@ -199,8 +199,8 @@ impl EnvironmentValidator {
                     errors.push("Production SS58 prefix must not be 42 (generic Substrate prefix)".to_string());
                 }
                 
-                if RATE_LIMIT_DEFAULT_TXS_PER_BLOCK > 200 {
-                    errors.push("Production transaction per block limit is too high".to_string());
+                if RATE_LIMIT_DEFAULT_TXS_PER_BLOCK > 75 {
+                    errors.push("Production transaction per block limit is too high (max 75 recommended)".to_string());
                 }
                 
                 if CONSENSUS_ALLOW_MULTIPLE_BLOCKS {
@@ -271,7 +271,7 @@ impl EnvironmentValidator {
 
 // Rate limiting parameters
 #[cfg(feature = "production")]
-pub const RATE_LIMIT_DEFAULT_TXS_PER_BLOCK: u32 = 100;
+pub const RATE_LIMIT_DEFAULT_TXS_PER_BLOCK: u32 = 50;
 #[cfg(feature = "staging")]
 pub const RATE_LIMIT_DEFAULT_TXS_PER_BLOCK: u32 = 200;
 #[cfg(feature = "local-testnet")]
@@ -280,7 +280,7 @@ pub const RATE_LIMIT_DEFAULT_TXS_PER_BLOCK: u32 = 500;
 pub const RATE_LIMIT_DEFAULT_TXS_PER_BLOCK: u32 = 1000; // Development default
 
 #[cfg(feature = "production")]
-pub const RATE_LIMIT_DEFAULT_TXS_PER_MINUTE: u32 = 600;
+pub const RATE_LIMIT_DEFAULT_TXS_PER_MINUTE: u32 = 300;
 #[cfg(feature = "staging")]
 pub const RATE_LIMIT_DEFAULT_TXS_PER_MINUTE: u32 = 1200;
 #[cfg(feature = "local-testnet")]
@@ -289,7 +289,7 @@ pub const RATE_LIMIT_DEFAULT_TXS_PER_MINUTE: u32 = 3000;
 pub const RATE_LIMIT_DEFAULT_TXS_PER_MINUTE: u32 = 6000; // Development default
 
 #[cfg(feature = "production")]
-pub const RATE_LIMIT_MAX_TXS_PER_ACCOUNT: u32 = 100;
+pub const RATE_LIMIT_MAX_TXS_PER_ACCOUNT: u32 = 50;
 #[cfg(feature = "staging")]
 pub const RATE_LIMIT_MAX_TXS_PER_ACCOUNT: u32 = 200;
 #[cfg(feature = "local-testnet")]
@@ -307,7 +307,7 @@ pub const RATE_LIMIT_MAX_BYTES_PER_ACCOUNT: u32 = 1024 * 1024; // 1MB
 pub const RATE_LIMIT_MAX_BYTES_PER_ACCOUNT: u32 = 2 * 1024 * 1024; // 2MB development
 
 #[cfg(feature = "production")]
-pub const RATE_LIMIT_MAX_TXS_PER_MINUTE: u32 = 60;
+pub const RATE_LIMIT_MAX_TXS_PER_MINUTE: u32 = 30;
 #[cfg(feature = "staging")]
 pub const RATE_LIMIT_MAX_TXS_PER_MINUTE: u32 = 120;
 #[cfg(feature = "local-testnet")]
