@@ -9,6 +9,10 @@ use sc_cli::SubstrateCli;
 use sc_service::PartialComponents;
 use solochain_template_runtime::{Block, EXISTENTIAL_DEPOSIT};
 use sp_keyring::Sr25519Keyring;
+// Temporarily disabled rebase CLI commands
+// use sp_api::ProvideRuntimeApi;
+// use sp_rebase_api::RebaseApi;
+// use std::io::Write;
 
 impl SubstrateCli for Cli {
 	fn impl_name() -> String {
@@ -177,6 +181,10 @@ pub fn run() -> sc_cli::Result<()> {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| cmd.run::<Block>(&config))
 		},
+		Some(Subcommand::Rebase(_cmd)) => {
+			eprintln!("Rebase commands are currently being implemented. Please use RPC endpoints for now.");
+			Ok(())
+		},
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
@@ -196,3 +204,144 @@ pub fn run() -> sc_cli::Result<()> {
 		},
 	}
 }
+
+/*
+/// Run rebase subcommands (temporarily disabled)
+#[allow(dead_code)]
+async fn run_rebase_cmd<C>(
+	cmd: &RebaseCmd,
+	client: std::sync::Arc<C>,
+) -> sc_cli::Result<()>
+where
+	C: ProvideRuntimeApi<Block> + sp_blockchain::HeaderBackend<Block> + Send + Sync + 'static,
+	C::Api: RebaseApi<Block>,
+{
+	match cmd {
+		RebaseCmd::ExportState { at_block, output } => {
+			let hash = if let Some(hex_hash) = at_block {
+				let bytes = hex::decode(hex_hash.trim_start_matches("0x"))
+					.map_err(|e| format!("Invalid block hash: {}", e))?;
+				if bytes.len() != 32 {
+					return Err("Invalid block hash length".into());
+				}
+				let mut hash = [0u8; 32];
+				hash.copy_from_slice(&bytes);
+				Some(hash.into())
+			} else {
+				None
+			};
+
+			let api = client.runtime_api();
+			let at = client.info().best_hash;
+
+			let state_data = api.export_state(at, hash)
+				.map_err(|e| format!("Failed to export state: {}", e))?
+				.map_err(|e| format!("Runtime error: {:?}", e))?;
+
+			std::fs::write(output, &state_data)
+				.map_err(|e| format!("Failed to write state file: {}", e))?;
+
+			println!("State exported to {}", output);
+			println!("Exported {} bytes", state_data.len());
+		},
+
+		RebaseCmd::ExportPalletState { pallet, at_block, output } => {
+			let hash = if let Some(hex_hash) = at_block {
+				let bytes = hex::decode(hex_hash.trim_start_matches("0x"))
+					.map_err(|e| format!("Invalid block hash: {}", e))?;
+				if bytes.len() != 32 {
+					return Err("Invalid block hash length".into());
+				}
+				let mut hash = [0u8; 32];
+				hash.copy_from_slice(&bytes);
+				Some(hash.into())
+			} else {
+				None
+			};
+
+			let api = client.runtime_api();
+			let at = client.info().best_hash;
+
+			let state_data = api.export_pallet_state(at, pallet.clone().into_bytes(), hash)
+				.map_err(|e| format!("Failed to export pallet state: {}", e))?
+				.map_err(|e| format!("Runtime error: {:?}", e))?;
+
+			std::fs::write(output, &state_data)
+				.map_err(|e| format!("Failed to write pallet state file: {}", e))?;
+
+			println!("Pallet '{}' state exported to {}", pallet, output);
+			println!("Exported {} bytes", state_data.len());
+		},
+
+		RebaseCmd::BuildGenesisSpec { state_file, base_spec, output } => {
+			// Load the exported state
+			let state_data = std::fs::read(state_file)
+				.map_err(|e| format!("Failed to read state file: {}", e))?;
+
+			// Load the base chain spec
+			let base_spec_data = std::fs::read_to_string(base_spec)
+				.map_err(|e| format!("Failed to read base spec: {}", e))?;
+
+			let mut spec: serde_json::Value = serde_json::from_str(&base_spec_data)
+				.map_err(|e| format!("Failed to parse base spec: {}", e))?;
+
+			// Replace genesis runtime with exported state
+			// This is a simplified implementation - real implementation would need proper state formatting
+			let state_hex = hex::encode(&state_data);
+			if let Some(genesis) = spec.get_mut("genesis") {
+				if let Some(runtime) = genesis.get_mut("runtime") {
+					runtime["system"] = serde_json::json!({
+						"code": state_hex
+					});
+				}
+			}
+
+			// Write the new genesis spec
+			let output_data = serde_json::to_string_pretty(&spec)
+				.map_err(|e| format!("Failed to serialize spec: {}", e))?;
+
+			std::fs::write(output, output_data)
+				.map_err(|e| format!("Failed to write genesis spec: {}", e))?;
+
+			println!("New genesis spec created: {}", output);
+			println!("Based on state from: {}", state_file);
+		},
+
+		RebaseCmd::Status => {
+			let api = client.runtime_api();
+			let at = client.info().best_hash;
+
+			let metadata = api.get_rebase_metadata(at)
+				.map_err(|e| format!("Failed to get rebase metadata: {}", e))?;
+
+			let status = api.get_rebase_status(at)
+				.map_err(|e| format!("Failed to get rebase status: {}", e))?;
+
+			let auto_enabled = api.is_auto_rebase_enabled(at)
+				.map_err(|e| format!("Failed to check auto rebase: {}", e))?;
+
+			let interval = api.get_rebase_interval(at)
+				.map_err(|e| format!("Failed to get rebase interval: {}", e))?;
+
+			println!("=== Rebase Status ===");
+			println!("Current Status: {:?}", status);
+			println!("Last Rebase Block: {:?}", metadata.last_rebase_block);
+			println!("Total Rebases: {}", metadata.rebase_count);
+			println!("Archive Count: {}", metadata.archive_count);
+			println!("Auto Rebase Enabled: {}", auto_enabled);
+			println!("Rebase Interval: {} blocks", interval);
+
+			if let Some(next_block) = metadata.next_scheduled_rebase {
+				println!("Next Scheduled Rebase: Block {:?}", next_block);
+			}
+
+			if let Some(next_auto) = api.get_next_rebase_block(at)
+				.map_err(|e| format!("Failed to get next rebase block: {}", e))? {
+				println!("Next Auto Rebase: Block {:?}", next_auto);
+			}
+		},
+	}
+
+	Ok(())
+}
+*/

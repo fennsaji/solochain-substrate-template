@@ -7,6 +7,8 @@ pub mod apis;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 pub mod configs;
+pub mod offchain_simple;
+pub mod offchain_system;
 
 extern crate alloc;
 use alloc::vec::Vec;
@@ -221,4 +223,7 @@ mod runtime {
 
 	#[runtime::pallet_index(6)]
 	pub type RateLimiter = pallet_rate_limiter;
+
+	#[runtime::pallet_index(7)]
+	pub type RebaseWorker = offchain_simple::pallet;
 }

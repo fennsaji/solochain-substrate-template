@@ -43,4 +43,50 @@ pub enum Subcommand {
 
 	/// Db meta columns information.
 	ChainInfo(sc_cli::ChainInfoCmd),
+
+	/// Rebase operations.
+	#[command(subcommand)]
+	Rebase(RebaseCmd),
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum RebaseCmd {
+	/// Export full runtime state for rebasing.
+	ExportState {
+		/// Block hash to export state from. If not provided, uses latest block.
+		#[arg(long)]
+		at_block: Option<String>,
+		/// Output file for exported state.
+		#[arg(long, default_value = "state.bin")]
+		output: String,
+	},
+
+	/// Export specific pallet state.
+	ExportPalletState {
+		/// Name of the pallet to export.
+		#[arg(long)]
+		pallet: String,
+		/// Block hash to export state from. If not provided, uses latest block.
+		#[arg(long)]
+		at_block: Option<String>,
+		/// Output file for exported state.
+		#[arg(long, default_value = "pallet_state.bin")]
+		output: String,
+	},
+
+	/// Build a new genesis spec from exported state.
+	BuildGenesisSpec {
+		/// Path to exported state file.
+		#[arg(long)]
+		state_file: String,
+		/// Base chain spec file to use as template.
+		#[arg(long)]
+		base_spec: String,
+		/// Output genesis spec file.
+		#[arg(long, default_value = "rebased_genesis.json")]
+		output: String,
+	},
+
+	/// Show rebase status and metadata.
+	Status,
 }

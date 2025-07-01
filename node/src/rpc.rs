@@ -14,6 +14,10 @@ use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 
+mod rebase_rpc;
+
+use rebase_rpc::{RebaseRpcImpl, RebaseRpcServer};
+
 /// Full client dependencies.
 pub struct FullDeps<C, P> {
 	/// The client instance to use.
@@ -31,6 +35,7 @@ where
 	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError> + 'static,
 	C: Send + Sync + 'static,
 	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
+	C::Api: sp_rebase_api::RebaseApi<Block>,
 	C::Api: BlockBuilder<Block>,
 	P: TransactionPool + 'static,
 {
@@ -40,6 +45,9 @@ where
 	let FullDeps { client, pool } = deps;
 
 	module.merge(System::new(client.clone(), pool).into_rpc())?;
+	
+	// Add rebase RPC
+	module.merge(RebaseRpcImpl::new(client.clone()).into_rpc())?;
 
 	// Extend this RPC with a custom API by using the following syntax.
 	// `YourRpcStruct` should have a reference to a client, which is needed

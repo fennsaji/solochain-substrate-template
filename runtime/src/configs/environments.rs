@@ -351,3 +351,22 @@ pub const NETWORK_SS58_PREFIX: u8 = 42; // Generic Substrate prefix for dev/loca
 pub const NETWORK_MAX_CONSUMERS: u32 = 32;
 #[cfg(not(any(feature = "production", feature = "staging")))]
 pub const NETWORK_MAX_CONSUMERS: u32 = 16; // Development/Local
+
+// Rebase parameters
+#[cfg(feature = "production")]
+pub const REBASE_AUTO_ENABLED: bool = false; // Governance-only for safety
+#[cfg(feature = "staging")]
+pub const REBASE_AUTO_ENABLED: bool = true;
+#[cfg(feature = "local-testnet")]
+pub const REBASE_AUTO_ENABLED: bool = true; // Enable for testing
+#[cfg(not(any(feature = "production", feature = "staging", feature = "local-testnet")))]
+pub const REBASE_AUTO_ENABLED: bool = true; // Development default
+
+#[cfg(feature = "production")]
+pub const REBASE_INTERVAL_BLOCKS: u32 = 100_000; // ~14 hours if enabled
+#[cfg(feature = "staging")]
+pub const REBASE_INTERVAL_BLOCKS: u32 = 50_000; // Every 50k blocks (~7 hours)
+#[cfg(feature = "local-testnet")]
+pub const REBASE_INTERVAL_BLOCKS: u32 = 100; // Fast testing interval
+#[cfg(not(any(feature = "production", feature = "staging", feature = "local-testnet")))]
+pub const REBASE_INTERVAL_BLOCKS: u32 = 100; // Every 100 blocks (~1.2 minutes)

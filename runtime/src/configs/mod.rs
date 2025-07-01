@@ -29,6 +29,7 @@
 // For more information, please refer to <http://unlicense.org>
 
 pub mod environments;
+pub mod offchain_worker;
 
 // Substrate and Polkadot dependencies
 use frame_support::{
@@ -191,3 +192,6 @@ impl pallet_rate_limiter::Config for Runtime {
 	/// Development: 600, Local: 300, Staging: 120, Production: 60
 	type MaxTransactionsPerMinute = ConstU32<RATE_LIMIT_MAX_TXS_PER_MINUTE>;
 }
+
+// Include off-chain worker configuration
+use offchain_worker::*;

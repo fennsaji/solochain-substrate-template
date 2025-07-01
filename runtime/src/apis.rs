@@ -111,7 +111,11 @@ impl_runtime_apis! {
 
 	impl sp_offchain::OffchainWorkerApi<Block> for Runtime {
 		fn offchain_worker(header: &<Block as BlockT>::Header) {
-			Executive::offchain_worker(header)
+			// Call the standard executive off-chain worker
+			Executive::offchain_worker(header);
+			
+			// Also call our custom system-level off-chain worker
+			crate::offchain_system::run_offchain_worker::<Runtime>(header.number);
 		}
 	}
 
@@ -255,4 +259,69 @@ impl_runtime_apis! {
 			crate::genesis_config_presets::preset_names()
 		}
 	}
+
+	impl sp_rebase_api::RebaseApi<Block> for Runtime {
+		fn export_state(at_block: Option<<Block as BlockT>::Hash>) -> Result<Vec<u8>, sp_runtime::DispatchError> {
+			let _block_hash = at_block.unwrap_or_else(|| System::block_hash(System::block_number()));
+			
+			// Export full runtime state at specified block
+			// This is a simplified implementation - in production, use proper state export
+			let state_data = sp_io::storage::root(sp_runtime::StateVersion::V1);
+			Ok(state_data.to_vec())
+		}
+
+		fn export_pallet_state(pallet_name: Vec<u8>, at_block: Option<<Block as BlockT>::Hash>) -> Result<Vec<u8>, sp_runtime::DispatchError> {
+			let _block_hash = at_block.unwrap_or_else(|| System::block_hash(System::block_number()));
+			let _pallet_str = alloc::string::String::from_utf8(pallet_name).map_err(|_| sp_runtime::DispatchError::Other("Invalid pallet name"))?;
+			
+			// Export specific pallet state
+			// Implementation would iterate through pallet storage items
+			Ok(Vec::new()) // Placeholder
+		}
+
+		fn validate_state_root(state_root: [u8; 32]) -> bool {
+			let current_root = sp_io::storage::root(sp_runtime::StateVersion::V1);
+			current_root.as_slice() == &state_root
+		}
+
+		fn get_rebase_metadata() -> sp_rebase_api::RebaseMetadata<NumberFor<Block>> {
+			use sp_runtime::traits::Zero;
+			sp_rebase_api::RebaseMetadata {
+				last_rebase_block: Zero::zero(),
+				rebase_count: 0,
+				archive_count: 0,
+				next_scheduled_rebase: None,
+			}
+		}
+
+		fn get_rebase_status() -> sp_rebase_api::RebaseStatus {
+			sp_rebase_api::RebaseStatus::Idle
+		}
+
+		fn get_next_rebase_block() -> Option<NumberFor<Block>> {
+			use super::configs::environments::*;
+			if REBASE_AUTO_ENABLED {
+				let current_block = System::block_number();
+				let interval = NumberFor::<Block>::from(REBASE_INTERVAL_BLOCKS);
+				Some(current_block + interval)
+			} else {
+				None
+			}
+		}
+
+		fn is_auto_rebase_enabled() -> bool {
+			use super::configs::environments::REBASE_AUTO_ENABLED;
+			REBASE_AUTO_ENABLED
+		}
+
+		fn get_rebase_interval() -> u32 {
+			use super::configs::environments::REBASE_INTERVAL_BLOCKS;
+			REBASE_INTERVAL_BLOCKS
+		}
+
+		fn get_heartbeat() -> Option<u32> {
+			crate::offchain_system::get_heartbeat()
+		}
+	}
+
 }

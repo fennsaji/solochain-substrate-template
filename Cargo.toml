@@ -13,6 +13,7 @@ members = [
     "consensus/micc-client",
     "consensus/micc",
     "consensus/slots",
+    "consensus/rebase-primitives",
     "pallets/rate-limiter",
 ]
 resolver = "2"
@@ -22,6 +23,7 @@ solochain-template-runtime = { path = "./runtime", default-features = false }
 sp-consensus-micc = { path = "./consensus/micc-primitives", default-features = false }
 sc-consensus-micc = { path = "./consensus/micc-client", default-features = false }
 pallet-micc = { path = "./consensus/micc", default-features = false }
+sp-rebase-api = { path = "./consensus/rebase-primitives", default-features = false }
 pallet-rate-limiter = { path = "./pallets/rate-limiter", default-features = false }
 clap = { version = "4.5.13" }
 frame-benchmarking-cli = { version = "47.0.0", default-features = false }
@@ -75,6 +77,7 @@ pallet-grandpa = { version = "40.0.0", default-features = false }
 pallet-sudo = { version = "40.0.0", default-features = false }
 pallet-timestamp = { version = "39.0.0", default-features = false }
 scale-info = { version = "2.11.6", default-features = false }
+serde = { version = "1.0", default-features = false }
 serde_json = { version = "1.0.132", default-features = false }
 sp-consensus-grandpa = { version = "23.1.0", default-features = false }
 sp-arithmetic = { version = "26.1.0", default-features = false }

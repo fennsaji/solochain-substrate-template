@@ -28,6 +28,8 @@ pallet-grandpa.workspace = true
 pallet-sudo.workspace = true
 pallet-timestamp.workspace = true
 pallet-rate-limiter.workspace = true
+sp-rebase-api.workspace = true
+sp-io.workspace = true
 scale-info = { features = ["derive", "serde"], workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 sp-api.workspace = true
@@ -75,6 +77,8 @@ std = [
 	"sp-core/std",
 	"sp-genesis-builder/std",
 	"sp-inherents/std",
+	"sp-io/std",
+	"sp-rebase-api/std",
 	"sp-keyring/std",
 	"sp-offchain/std",
 	"sp-runtime/std",

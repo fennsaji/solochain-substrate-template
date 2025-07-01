@@ -23,6 +23,10 @@ frame-metadata-hash-extension.workspace = true
 frame-system.default-features = true
 frame-system.workspace = true
 futures = { features = ["thread-pool"], workspace = true }
+hex = "0.4"
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+codec = { workspace = true }
 jsonrpsee = { features = ["server"], workspace = true }
 sc-basic-authorship.default-features = true
 sc-basic-authorship.workspace = true
@@ -61,6 +65,8 @@ sp-blockchain.default-features = true
 sp-blockchain.workspace = true
 sp-consensus-micc.default-features = true
 sp-consensus-micc.workspace = true
+sp-rebase-api.default-features = true
+sp-rebase-api.workspace = true
 sp-core.default-features = true
 sp-core.workspace = true
 sp-genesis-builder.default-features = true

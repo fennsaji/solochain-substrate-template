@@ -14,7 +14,8 @@ module.exports = {
         '--rpc-cors', 'all',
         '--rpc-methods=Unsafe',
         '--name', 'node-1',
-        '--pruning', 'archive'
+        '--pruning', 'archive',
+        '--offchain-worker', 'when-authority'
       ]
     },
     {
@@ -32,7 +33,8 @@ module.exports = {
         '--rpc-methods=Unsafe',
         '--node-key', '0000000000000000000000000000000000000000000000000000000000000002',
         '--name', 'node-2',
-        '--pruning', 'archive'
+        '--pruning', 'archive',
+        '--offchain-worker', 'when-authority'
       ]
     },
     {
@@ -50,7 +52,8 @@ module.exports = {
         '--rpc-methods=Unsafe',
         '--node-key', '0000000000000000000000000000000000000000000000000000000000000003',
         '--name', 'node-3',
-        '--pruning', 'archive'
+        '--pruning', 'archive',
+        '--offchain-worker', 'when-authority'
       ]
     }
   ]
