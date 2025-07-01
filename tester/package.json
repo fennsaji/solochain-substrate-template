@@ -1,0 +1,31 @@
+{
+  "name": "blockchain-tester",
+  "version": "1.0.0",
+  "description": "Comprehensive blockchain testing tool for MetaMUI",
+  "main": "system_remark.js",
+  "scripts": {
+    "test": "node system_remark.js",
+    "test:single": "node system_remark.js single",
+    "test:serial": "node system_remark.js serial --count 10",
+    "test:parallel": "node system_remark.js parallel --count 5 --accounts alice,bob,charlie,dave",
+    "test:priority": "node system_remark.js priority --count 15",
+    "test:stress": "node system_remark.js stress --duration 60000 --interval 200",
+    "test:burst": "node system_remark.js burst --size 25 --count 5",
+    "help": "node system_remark.js --help"
+  },
+  "dependencies": {
+    "@polkadot/api": "^16.2.2",
+    "commander": "^14.0.0"
+  },
+  "keywords": [
+    "blockchain",
+    "testing",
+    "substrate",
+    "polkadot",
+    "metamui",
+    "event-driven",
+    "consensus"
+  ],
+  "author": "MetaMUI Team",
+  "license": "MIT"
+}

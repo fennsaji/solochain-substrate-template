@@ -46,6 +46,7 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for RemarkBuilder {
 			SystemCall::remark { remark: vec![] }.into(),
 			nonce,
 		)
+		.map_err(|_| "Failed to create benchmark extrinsic")?
 		.into();
 
 		Ok(extrinsic)
@@ -86,6 +87,7 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for TransferKeepAliveBuilder {
 				.into(),
 			nonce,
 		)
+		.map_err(|_| "Failed to create benchmark extrinsic")?
 		.into();
 
 		Ok(extrinsic)
@@ -100,8 +102,11 @@ pub fn create_benchmark_extrinsic(
 	sender: sp_core::sr25519::Pair,
 	call: runtime::RuntimeCall,
 	nonce: u32,
-) -> runtime::UncheckedExtrinsic {
-	let genesis_hash = client.block_hash(0).ok().flatten().expect("Genesis block exists; qed");
+) -> std::result::Result<runtime::UncheckedExtrinsic, Box<dyn std::error::Error>> {
+	let genesis_hash = client.block_hash(0)
+		.ok()
+		.flatten()
+		.ok_or("Genesis block not found")?;
 	let best_hash = client.chain_info().best_hash;
 	let best_block = client.chain_info().best_number;
 
@@ -119,6 +124,7 @@ pub fn create_benchmark_extrinsic(
 		)),
 		frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
 		frame_system::CheckWeight::<runtime::Runtime>::new(),
+		runtime::CheckRateLimit::<runtime::Runtime>::new(),
 		frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
 		frame_system::WeightReclaim::<runtime::Runtime>::new(),
 	);
@@ -133,18 +139,19 @@ pub fn create_benchmark_extrinsic(
 			best_hash,
 			(),
 			(),
+			(),
 			None,
 			(),
 		),
 	);
 	let signature = raw_payload.using_encoded(|e| sender.sign(e));
 
-	runtime::UncheckedExtrinsic::new_signed(
+	Ok(runtime::UncheckedExtrinsic::new_signed(
 		call,
 		sp_runtime::AccountId32::from(sender.public()).into(),
 		runtime::Signature::Sr25519(signature),
 		tx_ext,
-	)
+	))
 }
 
 /// Generates inherent data for the `benchmark overhead` command.
