@@ -14,6 +14,7 @@ members = [
     "consensus/micc",
     "consensus/slots",
     "pallets/rate-limiter",
+    "pallets/metamui-crypto",
 ]
 resolver = "2"
 
@@ -23,6 +24,7 @@ sp-consensus-micc = { path = "./consensus/micc-primitives", default-features = f
 sc-consensus-micc = { path = "./consensus/micc-client", default-features = false }
 pallet-micc = { path = "./consensus/micc", default-features = false }
 pallet-rate-limiter = { path = "./pallets/rate-limiter", default-features = false }
+pallet-metamui-crypto = { path = "./pallets/metamui-crypto", default-features = false }
 clap = { version = "4.5.13" }
 frame-benchmarking-cli = { version = "47.0.0", default-features = false }
 frame-metadata-hash-extension = { version = "0.8.0", default-features = false }

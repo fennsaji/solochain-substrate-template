@@ -21,6 +21,8 @@ sp-consensus-slots.workspace = true
 sp-inherents.workspace = true
 sp-runtime.workspace = true
 sp-timestamp.workspace = true
+pallet-metamui-crypto.workspace = true
+log.workspace = true
 
 [features]
 default = ["std"]
@@ -34,6 +36,8 @@ std = [
 	"sp-inherents/std",
 	"sp-runtime/std",
 	"sp-timestamp/std",
+	"pallet-metamui-crypto/std",
+	"log/std",
 ]
 
 # Serde support without relying on std features.

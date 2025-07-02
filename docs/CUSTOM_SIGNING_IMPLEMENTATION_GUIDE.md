@@ -2,7 +2,7 @@
 
 ## 📋 **Overview**
 
-This document provides a comprehensive guide for implementing your own custom signing method to override SR25519 and Ed25519 in your Substrate-based blockchain. The implementation involves creating custom cryptographic traits, integrating them with the consensus system, and ensuring proper runtime configuration.
+This document provides a comprehensive guide for implementing your own metamui signing method to override SR25519 and Ed25519 in your Substrate-based blockchain. The implementation involves creating metamui cryptographic traits, integrating them with the consensus system, and ensuring proper runtime configuration.
 
 **Target Audience**: Blockchain developers working with Substrate/Polkadot SDK  
 **Prerequisites**: Rust programming, basic cryptography knowledge, Substrate framework familiarity
@@ -98,17 +98,17 @@ pub trait RuntimeAppPublic: Sized {
 
 ### **Step 1: Create Your Custom Crypto Module**
 
-Create a new pallet for your custom cryptographic implementation:
+Create a new pallet for your metamui cryptographic implementation:
 
 ```bash
-mkdir -p pallets/custom-crypto/src
+mkdir -p pallets/metamui-crypto/src
 ```
 
-**File: `pallets/custom-crypto/Cargo.toml`**
+**File: `pallets/metamui-crypto/Cargo.toml`**
 
 ```toml
 [package]
-name = "pallet-custom-crypto"
+name = "pallet-metamui-crypto"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
@@ -146,7 +146,7 @@ std = [
 ]
 ```
 
-**File: `pallets/custom-crypto/src/lib.rs`**
+**File: `pallets/metamui-crypto/src/lib.rs`**
 
 ```rust
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -160,8 +160,8 @@ use codec::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_runtime::traits::{Verify, IdentifyAccount};
 
-// Your custom crypto type ID (must be unique)
-pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"mcst"); // "my custom"
+// Your metamui crypto type ID (must be unique)
+pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"mcst"); // "my metamui"
 
 /// Custom public key (32 bytes)
 #[derive(
@@ -207,7 +207,7 @@ impl Derive for Public {
         &self,
         _path: Iter,
     ) -> Option<Self> {
-        // TODO: Implement your custom key derivation algorithm
+        // TODO: Implement your metamui key derivation algorithm
         // This is a placeholder - implement based on your cryptographic scheme
         Some(*self)
     }
@@ -230,8 +230,8 @@ impl SignatureT for Signature {
 impl Signature {
     /// Custom signature verification logic
     pub fn verify_custom(&self, message: &[u8], public: &Public) -> bool {
-        // TODO: Implement your custom signature verification algorithm
-        // This is where you'd integrate your custom cryptographic scheme
+        // TODO: Implement your metamui signature verification algorithm
+        // This is where you'd integrate your metamui cryptographic scheme
         
         // Example placeholder logic - replace with your actual implementation
         // For demonstration, we're showing a simple hash-based verification
@@ -299,7 +299,7 @@ impl sp_core::crypto::Pair for Pair {
     fn generate_with_phrase(password: Option<&str>) -> (Self, String, Self::Seed) {
         // TODO: Implement mnemonic-based generation
         let (pair, seed) = Self::generate();
-        let phrase = "custom mnemonic phrase".to_string(); // Generate actual BIP39 phrase
+        let phrase = "metamui mnemonic phrase".to_string(); // Generate actual BIP39 phrase
         (pair, phrase, seed)
     }
 
@@ -339,7 +339,7 @@ impl sp_core::crypto::Pair for Pair {
     }
 
     fn sign(&self, message: &[u8]) -> Self::Signature {
-        // TODO: Implement your custom signing algorithm
+        // TODO: Implement your metamui signing algorithm
         
         #[cfg(feature = "std")]
         {
@@ -462,23 +462,23 @@ impl From<[u8; 64]> for Signature {
 
 ### **Step 2: Create Application-Specific Wrapper**
 
-Update your MICC primitives to include your custom crypto:
+Update your MICC primitives to include your metamui crypto:
 
-**File: `consensus/micc-primitives/src/custom.rs`**
+**File: `consensus/micc-primitives/src/metamui.rs`**
 
 ```rust
 use sp_application_crypto::{app_crypto, KeyTypeId};
 use sp_core::crypto::CryptoTypeId;
 
 // Your key type identifier for MICC consensus
-pub const CUSTOM_MICC: KeyTypeId = KeyTypeId(*b"mccs"); // "my custom consensus signature"
+pub const CUSTOM_MICC: KeyTypeId = KeyTypeId(*b"mccs"); // "my metamui consensus signature"
 
 mod app_custom {
     use super::CUSTOM_MICC;
-    use pallet_custom_crypto as custom; // Import your custom crypto module
+    use pallet_custom_crypto as metamui; // Import your metamui crypto module
     
-    // Create application-specific crypto using your custom scheme
-    app_crypto!(custom, CUSTOM_MICC);
+    // Create application-specific crypto using your metamui scheme
+    app_crypto!(metamui, CUSTOM_MICC);
 }
 
 sp_application_crypto::with_pair! {
@@ -535,8 +535,8 @@ use sp_runtime::{
     ConsensusEngineId, Justification,
 };
 
-// Add your custom module
-pub mod custom;
+// Add your metamui module
+pub mod metamui;
 
 // Keep existing sr25519 and ed25519 modules for backwards compatibility
 pub mod sr25519 {
@@ -567,8 +567,8 @@ pub mod ed25519 {
     pub type AuthorityId = app_ed25519::Public;
 }
 
-// Re-export custom as the default
-pub use custom::{AuthorityId, AuthorityPair, AuthoritySignature};
+// Re-export metamui as the default
+pub use metamui::{AuthorityId, AuthorityPair, AuthoritySignature};
 
 // Rest of the file remains the same...
 ```
@@ -578,21 +578,21 @@ pub use custom::{AuthorityId, AuthorityPair, AuthoritySignature};
 **File: `runtime/src/configs/mod.rs`**
 
 ```rust
-use sp_consensus_micc::custom::AuthorityId as CustomMiccId;
+use sp_consensus_micc::metamui::AuthorityId as CustomMiccId;
 
-// Configure MICC pallet to use your custom crypto
+// Configure MICC pallet to use your metamui crypto
 impl pallet_micc::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type DisabledValidators = ();
-    type AuthorityId = CustomMiccId; // Use your custom authority ID
+    type AuthorityId = CustomMiccId; // Use your metamui authority ID
     type MaxAuthorities = ConstU32<32>;
     type WeightInfo = ();
 }
 
-// Update session keys to use custom crypto
+// Update session keys to use metamui crypto
 impl_opaque_keys! {
     pub struct SessionKeys {
-        pub micc: Micc,     // Your custom consensus keys
+        pub micc: Micc,     // Your metamui consensus keys
         pub grandpa: Grandpa,
     }
 }
@@ -614,7 +614,7 @@ pub type TxExtension = (
 **File: `runtime/src/lib.rs`**
 
 ```rust
-// Update the runtime to include your custom crypto pallet
+// Update the runtime to include your metamui crypto pallet
 construct_runtime!(
     pub enum Runtime
     {
@@ -629,7 +629,7 @@ construct_runtime!(
     }
 );
 
-// Update the signature type to support your custom signatures
+// Update the signature type to support your metamui signatures
 pub type Signature = sp_runtime::MultiSignature;
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 ```
@@ -639,7 +639,7 @@ pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::Account
 **File: `node/src/service.rs`**
 
 ```rust
-use sp_consensus_micc::custom::AuthorityPair as CustomMiccPair;
+use sp_consensus_micc::metamui::AuthorityPair as CustomMiccPair;
 
 // Update the import queue
 let import_queue =
@@ -736,12 +736,12 @@ members = [
     "consensus/micc",
     "consensus/slots",
     "pallets/rate-limiter",
-    "pallets/custom-crypto", # Add your custom crypto pallet
+    "pallets/metamui-crypto", # Add your metamui crypto pallet
 ]
 
 [workspace.dependencies]
-# Add your custom crypto pallet
-pallet-custom-crypto = { path = "./pallets/custom-crypto", default-features = false }
+# Add your metamui crypto pallet
+pallet-metamui-crypto = { path = "./pallets/metamui-crypto", default-features = false }
 
 # ... rest of dependencies
 ```
@@ -871,14 +871,14 @@ substrate/client/consensus/babe/src/lib.rs            # Another consensus exampl
 ### **Building Your Custom Implementation:**
 
 ```bash
-# Add your custom crypto pallet to the workspace
-echo 'pallet-custom-crypto = { path = "./pallets/custom-crypto", default-features = false }' >> Cargo.toml
+# Add your metamui crypto pallet to the workspace
+echo 'pallet-metamui-crypto = { path = "./pallets/metamui-crypto", default-features = false }' >> Cargo.toml
 
 # Build the entire project
 cargo build --release
 
 # Run tests
-cargo test -p pallet-custom-crypto
+cargo test -p pallet-metamui-crypto
 cargo test -p solochain-template-runtime
 
 # Check that everything compiles
@@ -889,19 +889,19 @@ cargo check --all
 
 ```bash
 # Test key generation and signing
-cargo test -p pallet-custom-crypto test_sign_verify
+cargo test -p pallet-metamui-crypto test_sign_verify
 
 # Test runtime integration
 cargo test -p solochain-template-runtime
 
-# Start development blockchain with custom crypto
+# Start development blockchain with metamui crypto
 ./target/release/solochain-template-node --dev
 
-# Insert custom keys (example)
+# Insert metamui keys (example)
 ./target/release/solochain-template-node key insert \
   --base-path /tmp/alice \
   --chain local \
-  --scheme Custom \  # Your custom scheme name
+  --scheme Custom \  # Your metamui scheme name
   --suri "//Alice" \
   --key-type mccs
 ```
@@ -911,8 +911,8 @@ cargo test -p solochain-template-runtime
 - [ ] Custom crypto module compiles without errors
 - [ ] All traits properly implemented
 - [ ] Unit tests pass for crypto operations
-- [ ] Runtime integrates custom crypto successfully
-- [ ] Node starts with custom crypto configuration
+- [ ] Runtime integrates metamui crypto successfully
+- [ ] Node starts with metamui crypto configuration
 - [ ] Keys can be generated and inserted
 - [ ] Blocks can be produced and signed
 - [ ] Signatures can be verified
@@ -962,13 +962,13 @@ pub const MY_KEY_TYPE: KeyTypeId = KeyTypeId(*b"myky");
 
 **Problem**: Type mismatches in runtime configuration
 ```rust
-error[E0308]: mismatched types: expected `sr25519::Public`, found `custom::Public`
+error[E0308]: mismatched types: expected `sr25519::Public`, found `metamui::Public`
 ```
 
 **Solution**: Update all type aliases consistently:
 ```rust
 // In runtime configuration
-type AuthorityId = sp_consensus_micc::custom::AuthorityId;
+type AuthorityId = sp_consensus_micc::metamui::AuthorityId;
 
 // In session keys
 impl_opaque_keys! {
@@ -1009,7 +1009,7 @@ impl_opaque_keys! {
 
 ## 🎯 **Conclusion**
 
-Implementing a custom signing method in Substrate requires careful attention to:
+Implementing a metamui signing method in Substrate requires careful attention to:
 
 1. **Cryptographic Security** - Your algorithm must be secure and properly implemented
 2. **Trait Implementation** - All required traits must be correctly implemented
@@ -1017,7 +1017,7 @@ Implementing a custom signing method in Substrate requires careful attention to:
 4. **Testing** - Comprehensive testing for security and functionality
 5. **Performance** - Meeting consensus timing requirements
 
-This guide provides the foundation for implementing your custom cryptographic scheme. Remember to:
+This guide provides the foundation for implementing your metamui cryptographic scheme. Remember to:
 
 - Start with thorough testing of your cryptographic primitives
 - Gradually integrate with the Substrate framework
@@ -1031,4 +1031,4 @@ This guide provides the foundation for implementing your custom cryptographic sc
 4. Test with actual consensus scenarios
 5. Consider formal security audits
 
-Good luck with your custom signing implementation! 🚀
+Good luck with your metamui signing implementation! 🚀

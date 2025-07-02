@@ -27,6 +27,7 @@ use sp_runtime::{ConsensusEngineId, KeyTypeId};
 
 pub mod digests;
 pub mod inherents;
+pub mod metamui;
 
 pub const MICC: KeyTypeId = KeyTypeId(*b"micc");
 
@@ -102,3 +103,7 @@ sp_api::decl_runtime_apis! {
 		fn authorities() -> Vec<AuthorityId>;
 	}
 }
+
+// Re-export Metamui as the default crypto scheme for MICC consensus
+// This replaces SR25519 with our post-quantum Falcon 512 implementation
+pub use metamui::{AuthorityId, AuthorityPair, AuthoritySignature};
