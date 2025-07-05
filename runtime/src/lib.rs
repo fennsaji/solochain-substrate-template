@@ -113,7 +113,7 @@ pub fn native_version() -> NativeVersion {
 	NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
 }
 
-/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
+/// Use standard MultiSignature for now - Falcon 512 for consensus only
 pub type Signature = MultiSignature;
 
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
@@ -221,4 +221,17 @@ mod runtime {
 
 	#[runtime::pallet_index(6)]
 	pub type RateLimiter = pallet_rate_limiter;
+}
+
+
+#[cfg(not(feature = "std"))]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+	#[cfg(feature = "std")]
+	sp_std::if_std! {
+		panic!("{}", _info);
+	}
+
+	#[allow(clippy::empty_loop)]
+	loop {}
 }

@@ -40,7 +40,7 @@ use frame_support::{
 	},
 };
 use frame_system::limits::{BlockLength, BlockWeights};
-use sp_consensus_micc::sr25519::AuthorityId as MiccId;
+use sp_consensus_micc::metamui::AuthorityId as MiccId;
 use sp_runtime::Perbill;
 use sp_version::RuntimeVersion;
 

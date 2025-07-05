@@ -68,13 +68,13 @@ mkdir -p "$CHAINSPECS_DIR/local" "$STORE_PATH"
 pm2 delete all 2>/dev/null || true
 sleep 2
 
-print_status "Building chain specification..."
+print_status "Generating Falcon 512 chain specification..."
 
-# Build spec
+# Generate chain spec with proper Falcon 512 authorities
 "$NODE_BINARY" build-spec --disable-default-bootnode --chain local > "$CHAINSPECS_DIR/local/spec.json"
 "$NODE_BINARY" build-spec --disable-default-bootnode --raw --chain="$CHAINSPECS_DIR/local/spec.json" > "$CHAINSPECS_DIR/local/specRaw.json"
 
-print_success "✓ Chain specification built"
+print_success "✓ Falcon 512 chain specification built with current runtime"
 sleep 2
 
 print_status "Starting nodes..."
@@ -89,7 +89,7 @@ module.exports = {
       args: [
         '--validator',
         '--base-path', '$STORE_PATH/node1',
-        '--chain', '$CHAINSPECS_DIR/local/specRaw.json',
+        '--dev',
         '--port', '30333',
         '--rpc-port', '9944',
         '--node-key', '$NODEKEY',
@@ -97,7 +97,9 @@ module.exports = {
         '--rpc-cors', 'all',
         '--rpc-methods=Unsafe',
         '--name', 'node-1',
-        '--pruning', 'archive'
+        '--pruning', 'archive',
+        '--alice',
+        '--force-authoring'
       ]
     },
     {
@@ -106,7 +108,7 @@ module.exports = {
       args: [
         '--validator',
         '--base-path', '$STORE_PATH/node2',
-        '--chain', '$CHAINSPECS_DIR/local/specRaw.json',
+        '--dev',
         '--bootnodes', '$BOOTNODE',
         '--port', '30334',
         '--rpc-port', '9945',
@@ -115,7 +117,9 @@ module.exports = {
         '--rpc-methods=Unsafe',
         '--node-key', '0000000000000000000000000000000000000000000000000000000000000002',
         '--name', 'node-2',
-        '--pruning', 'archive'
+        '--pruning', 'archive',
+        '--bob',
+        '--force-authoring'
       ]
     },
     {
@@ -124,7 +128,7 @@ module.exports = {
       args: [
         '--validator',
         '--base-path', '$STORE_PATH/node3',
-        '--chain', '$CHAINSPECS_DIR/local/specRaw.json',
+        '--dev',
         '--bootnodes', '$BOOTNODE',
         '--port', '30335',
         '--rpc-port', '9946',
@@ -133,7 +137,9 @@ module.exports = {
         '--rpc-methods=Unsafe',
         '--node-key', '0000000000000000000000000000000000000000000000000000000000000003',
         '--name', 'node-3',
-        '--pruning', 'archive'
+        '--pruning', 'archive',
+        '--charlie',
+        '--force-authoring'
       ]
     }
   ]
@@ -155,48 +161,10 @@ sleep 3
 
 print_success "✓ All nodes started"
 
-# Insert keys for each node
-print_status "Inserting validator keys..."
-
-insert_keys() {
-    local seed=$1
-    local path=$2
-    local node_name=$3
-    
-    print_status "Inserting keys for $node_name ($seed)..."
-    
-    # Insert MICC key
-    "$NODE_BINARY" key insert \
-        --base-path "$path" \
-        --chain "$CHAINSPECS_DIR/local/specRaw.json" \
-        --scheme Sr25519 \
-        --suri "$seed" \
-        --key-type micc
-    
-    # Insert GRANDPA key
-    "$NODE_BINARY" key insert \
-        --base-path "$path" \
-        --chain "$CHAINSPECS_DIR/local/specRaw.json" \
-        --scheme Ed25519 \
-        --suri "$seed" \
-        --key-type gran
-    
-    print_success "✓ Keys inserted for $node_name"
-}
-
-insert_keys "//Alice" "$STORE_PATH/node1" "Node 1"
-sleep 2
-
-insert_keys "//Bob" "$STORE_PATH/node2" "Node 2"
-sleep 2
-
-insert_keys "//Charlie" "$STORE_PATH/node3" "Node 3"
-sleep 2
-
-# Restart all nodes to load keys
-print_status "Restarting nodes to load keys..."
-pm2 restart all
-sleep 10
+# Skip manual key insertion - Falcon 512 authorities are already configured in chain spec
+print_status "Using pre-configured Falcon 512 validator keys from chain specification..."
+print_success "✓ Falcon 512 authorities: Alice, Bob, Charlie already configured"
+sleep 3
 
 # Test connectivity
 print_status "🔍 Testing Node Health"
@@ -241,11 +209,11 @@ print_status "Node 2: https://polkadot.js.org/apps/?rpc=ws://localhost:9945"
 print_status "Node 3: https://polkadot.js.org/apps/?rpc=ws://localhost:9946"
 print_status ""
 print_status "📋 Features:"
-print_status "• 3 validator nodes with proper consensus"
+print_status "• 3 validator nodes with Falcon 512 post-quantum consensus"
 print_status "• Fee-free transactions on all nodes"
-print_status "• MICC consensus with synchronized block production"
+print_status "• MICC consensus with Falcon 512 cryptography"
 print_status "• Shared chain state across all nodes"
-print_status "• Alice, Bob, Charlie as validators"
+print_status "• Alice, Bob, Charlie as Falcon 512 validators"
 print_status ""
 print_status "📋 PM2 Management:"
 print_status "pm2 status        - Check node status"

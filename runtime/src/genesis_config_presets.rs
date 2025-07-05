@@ -19,11 +19,12 @@ use crate::{AccountId, BalancesConfig, RuntimeGenesisConfig, SudoConfig, UNIT};
 use alloc::{vec, vec::Vec, format, string::ToString};
 use frame_support::build_struct_json_patch;
 use serde_json::Value;
-use sp_consensus_micc::sr25519::AuthorityId as MiccId;
+use sp_consensus_micc::metamui::AuthorityId as MiccId;
 use sp_consensus_grandpa::AuthorityId as GrandpaId;
 use sp_genesis_builder::{self, PresetId};
-use sp_keyring::Sr25519Keyring;
+use sp_keyring::{Sr25519Keyring, Ed25519Keyring};
 use sp_core::{sr25519, ed25519, Pair};
+use pallet_metamui_crypto::MetamuiPair;
 
 /// Production-safe configuration with reasonable token allocations
 fn production_genesis(
@@ -62,13 +63,14 @@ fn production_genesis(
 /// Generate secure production validator keys from seed phrases
 /// WARNING: In real production, these should be generated offline with proper HSM
 pub fn get_authority_keys_from_seed(seed: &str) -> (MiccId, GrandpaId) {
-	let sr25519_pair = sr25519::Pair::from_string(&format!("//{}//micc", seed), None)
+	// Generate metamui key pair for MICC consensus
+	let metamui_pair = MetamuiPair::from_string(&format!("//{}//micc", seed), None)
 		.expect("static values are valid; qed");
 	let ed25519_pair = ed25519::Pair::from_string(&format!("//{}//grandpa", seed), None)
 		.expect("static values are valid; qed");
 	
 	(
-		sr25519_pair.public().into(),
+		metamui_pair.public().into(),
 		ed25519_pair.public().into(),
 	)
 }
@@ -155,8 +157,8 @@ fn testnet_genesis(
 pub fn development_config_genesis() -> Value {
 	testnet_genesis(
 		vec![(
-			sp_keyring::Sr25519Keyring::Alice.public().into(),
-			sp_keyring::Ed25519Keyring::Alice.public().into(),
+			get_authority_keys_from_seed("Alice").0,
+			Ed25519Keyring::Alice.public().into(),
 		)],
 		vec![
 			Sr25519Keyring::Alice.to_account_id(),
@@ -164,7 +166,7 @@ pub fn development_config_genesis() -> Value {
 			Sr25519Keyring::AliceStash.to_account_id(),
 			Sr25519Keyring::BobStash.to_account_id(),
 		],
-		sp_keyring::Sr25519Keyring::Alice.to_account_id(),
+		Sr25519Keyring::Alice.to_account_id(),
 	)
 }
 
@@ -173,12 +175,12 @@ pub fn local_config_genesis() -> Value {
 	testnet_genesis(
 		vec![
 			(
-				sp_keyring::Sr25519Keyring::Alice.public().into(),
-				sp_keyring::Ed25519Keyring::Alice.public().into(),
+				get_authority_keys_from_seed("Alice").0,
+				Ed25519Keyring::Alice.public().into(),
 			),
 			(
-				sp_keyring::Sr25519Keyring::Bob.public().into(),
-				sp_keyring::Ed25519Keyring::Bob.public().into(),
+				get_authority_keys_from_seed("Bob").0,
+				Ed25519Keyring::Bob.public().into(),
 			),
 		],
 		Sr25519Keyring::iter()

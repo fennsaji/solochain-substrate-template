@@ -905,6 +905,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-vec"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
+
+[[package]]
 name = "bitcoin-internals"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2555,6 +2561,23 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
+]
+
+[[package]]
+name = "falcon-rust"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8518b206828d1e13ff2d3b2c666ab3fa30737ab04b30b5e5508efb9595b0ad36"
+dependencies = [
+ "bit-vec",
+ "hex",
+ "itertools 0.12.1",
+ "num",
+ "num-complex",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_distr",
+ "sha3",
 ]
 
 [[package]]
@@ -5641,6 +5664,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "num"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35bd024e8b2ff75562e5f34e7f4905839deb4b22955ef5e73d2fea1b9813cb23"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5692,6 +5729,17 @@ version = "0.1.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f"
 dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "num-iter"
+version = "0.1.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1429034a0490724d0075ebb2bc9e875d6503c3cf69e235a8941aa757d83ef5bf"
+dependencies = [
+ "autocfg",
+ "num-integer",
  "num-traits",
 ]
 
@@ -5892,9 +5940,16 @@ dependencies = [
 name = "pallet-metamui-crypto"
 version = "0.1.0"
 dependencies = [
+ "bip39",
+ "falcon-rust",
+ "getrandom 0.2.16",
+ "hex",
+ "hmac 0.12.1",
  "log",
  "parity-scale-codec",
+ "pbkdf2",
  "scale-info",
+ "sha2 0.10.9",
  "sp-application-crypto",
  "sp-core",
  "sp-io",
@@ -9447,6 +9502,7 @@ dependencies = [
  "frame-try-runtime",
  "pallet-balances",
  "pallet-grandpa",
+ "pallet-metamui-crypto",
  "pallet-micc",
  "pallet-rate-limiter",
  "pallet-sudo",
@@ -9645,8 +9701,11 @@ dependencies = [
  "sp-api",
  "sp-application-crypto",
  "sp-consensus-slots",
+ "sp-core",
  "sp-inherents",
+ "sp-io",
  "sp-runtime",
+ "sp-std",
  "sp-timestamp",
 ]
 

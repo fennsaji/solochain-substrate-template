@@ -16,7 +16,7 @@ codec = { features = ["derive"], workspace = true }
 scale-info = { features = ["derive"], workspace = true }
 
 # Substrate
-sp-core.workspace = true
+sp-core = { workspace = true, features = ["full_crypto"] }
 sp-std.workspace = true
 sp-runtime.workspace = true
 sp-application-crypto.workspace = true
@@ -25,14 +25,25 @@ log.workspace = true
 # Optional for std features
 sp-io = { workspace = true, optional = true }
 
-# TODO: Add Falcon 512 implementation crate
-# falcon-rust = { version = "0.1.0", optional = true }
+# Falcon 512 post-quantum cryptography
+falcon-rust = { version = "0.1.0", optional = true }
+getrandom = { version = "0.2", features = ["js"], optional = true }
+
+# BIP39 mnemonic support and key derivation
+bip39 = { version = "2.0", optional = true }
+pbkdf2 = { version = "0.12", optional = true }
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
 
 [dev-dependencies]
 sp-io.workspace = true
 
 [features]
 default = ["std"]
+bip39-support = ["bip39", "pbkdf2", "hmac", "sha2", "hex"]
+falcon-support = ["falcon-rust", "getrandom"]
+full_crypto = ["sp-core/full_crypto"]
 std = [
     "codec/std",
     "scale-info/std",
@@ -42,6 +53,16 @@ std = [
     "sp-application-crypto/std",
     "sp-io?/std",
     "log/std",
-    # TODO: Enable falcon-rust std feature when added
-    # "falcon-rust?/std",
+    # Enable these features only for std builds (not WASM)
+    "falcon-support",
+    "bip39-support",
+    "getrandom?/std",
+    # BIP39 support std features
+    "bip39?/std",
+    "pbkdf2?/std",
+    "hmac?/std",
+    "sha2?/std",
 ]
+
+# Enable full_crypto only for std environments to avoid WASM issues
+full_crypto_std = ["std", "full_crypto"]

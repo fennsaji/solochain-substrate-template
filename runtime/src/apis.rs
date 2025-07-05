@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 use frame_support::genesis_builder_helper::{build_state, get_preset};
 use pallet_grandpa::AuthorityId as GrandpaId;
 use sp_api::impl_runtime_apis;
-use sp_consensus_micc::sr25519::AuthorityId as MiccId;
+use sp_consensus_micc::metamui::AuthorityId as MiccId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	traits::{Block as BlockT, NumberFor},
