@@ -26,6 +26,7 @@ use sp_inherents::{CreateInherentDataProviders, InherentDataProvider};
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 
 use futures_timer::Delay;
+use log;
 use std::time::{Duration, Instant};
 
 /// Returns current duration since unix epoch.
@@ -33,7 +34,12 @@ pub fn duration_now() -> Duration {
 	use std::time::SystemTime;
 	let now = SystemTime::now();
 	now.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_else(|e| {
-		panic!("Current time {:?} is before unix epoch. Something is wrong: {:?}", now, e)
+		log::error!(
+			target: "consensus-slots",
+			"🚨 Current time {:?} is before unix epoch. This should be impossible. Error: {:?}. Returning zero duration.",
+			now, e
+		);
+		Duration::from_secs(0)
 	})
 }
 

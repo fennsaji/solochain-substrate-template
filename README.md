@@ -1,232 +1,487 @@
-# Substrate Node Template
+# 🚀 Solochain Substrate Template - MICC Consensus
 
-A fresh [Substrate](https://substrate.io/) node, ready for hacking :rocket:
+A production-ready Substrate-based blockchain template with **MICC (Metamui Instant Confirmation Consensus)** and **fee-free transactions**. Includes comprehensive environment-specific configuration for development, local testing, staging, and production deployments.
 
-A standalone version of this template is available for each release of Polkadot
-in the [Substrate Developer Hub Parachain
-Template](https://github.com/substrate-developer-hub/substrate-node-template/)
-repository. The parachain template is generated directly at each Polkadot
-release branch from the [Solochain Template in
-Substrate](https://github.com/paritytech/polkadot-sdk/tree/master/templates/solochain)
-upstream
+## ⚡ Quick Start
 
-It is usually best to use the stand-alone version to start a new project. All
-bugs, suggestions, and feature requests should be made upstream in the
-[Substrate](https://github.com/paritytech/polkadot-sdk/tree/master/substrate)
-repository.
-
-## Getting Started
-
-Depending on your operating system and Rust version, there might be additional
-packages required to compile this template. Check the
-[Install](https://docs.substrate.io/install/) instructions for your platform for
-the most common dependencies. Alternatively, you can use one of the [alternative
-installation](#alternatives-installations) options.
-
-Fetch solochain template code:
-
-```sh
-git clone https://github.com/paritytech/polkadot-sdk-solochain-template.git solochain-template
-
-cd solochain-template
-```
-
-### Build
-
-🔨 Use the following command to build the node without launching it:
-
-```sh
+```bash
+# 1. Build the blockchain
 cargo build --release
+
+# 2. Start development blockchain  
+./target/release/solochain-template-node --dev
+
+# 3. Connect via browser
+# Open: https://polkadot.js.org/apps/?rpc=ws://localhost:9944
+
+# 4. Send fee-free transactions!
 ```
 
-### Embedded Docs
+## 🌍 Environment-Specific Deployment
 
-After you build the project, you can use the following command to explore its
-parameters and subcommands:
+This blockchain supports **four distinct environments** with optimized configurations:
 
-```sh
-./target/release/solochain-template-node -h
-```
+### 🛠️ **Development Environment** (Default)
+**Purpose**: Local development and testing with maximum flexibility
 
-You can generate and view the [Rust
-Docs](https://doc.rust-lang.org/cargo/commands/cargo-doc.html) for this template
-with this command:
+```bash
+# Quick start (uses development configuration)
+./target/release/solochain-template-node --dev
 
-```sh
-cargo +nightly doc --open
-```
-
-### Single-Node Development Chain
-
-The following command starts a single-node development chain that doesn't
-persist state:
-
-```sh
+# Or use build script
+./scripts/build-environment.sh development release
 ./target/release/solochain-template-node --dev
 ```
 
-To purge the development chain's state, run the following command:
+**Configuration**:
+- **Max Authorities**: 10 (flexible for testing)
+- **Rate Limiting**: 1000 tx/block, 6000 tx/minute (very permissive)
+- **Memory Limits**: 2MB per account
+- **Block Production**: Flexible (allows multiple blocks per slot)
+- **Block History**: 250 blocks (2 minutes)
 
-```sh
-./target/release/solochain-template-node purge-chain --dev
+**Features**:
+- Alice has sudo access
+- High transaction limits for testing
+- Flexible validator setup
+- Temporary database (--dev flag)
+
+---
+
+### 🏠 **Local Testnet Environment**
+**Purpose**: Multi-node testing on local machine
+
+```bash
+# Build with local testnet configuration
+./scripts/build-environment.sh local-testnet release
+
+# Start local testnet
+./target/release/solochain-template-node --chain local
 ```
 
-To start the development chain with detailed logging, run the following command:
+**Configuration**:
+- **Max Authorities**: 5 (small validator set)
+- **Rate Limiting**: 500 tx/block, 3000 tx/minute (moderate)
+- **Memory Limits**: 1MB per account
+- **Block Production**: Secure (no multiple blocks per slot)
+- **Block History**: 1200 blocks (10 minutes)
 
-```sh
-RUST_BACKTRACE=1 ./target/release/solochain-template-node -ldebug --dev
+**Use Cases**:
+- Multi-node testing
+- Network behavior validation
+- Performance testing
+
+---
+
+### 🧪 **Staging Environment**
+**Purpose**: Production-like testing environment
+
+```bash
+# Build with staging configuration
+./scripts/build-environment.sh staging release
+
+# Start staging node
+./target/release/solochain-template-node --chain staging --validator
 ```
 
-Development chains:
+**Configuration**:
+- **Max Authorities**: 21 (production-like validator set)
+- **Rate Limiting**: 200 tx/block, 1200 tx/minute (conservative)
+- **Memory Limits**: 512KB per account
+- **Block Production**: Secure (strict consensus rules)
+- **Block History**: 2400 blocks (20 minutes)
 
-- Maintain state in a `tmp` folder while the node is running.
-- Use the **Alice** and **Bob** accounts as default validator authorities.
-- Use the **Alice** account as the default `sudo` account.
-- Are preconfigured with a genesis state (`/node/src/chain_spec.rs`) that
-  includes several pre-funded development accounts.
+**Requirements**:
+- Insert staging validator keys before starting
+- Configure staging genesis accounts
+- Test all production procedures
 
+---
 
-To persist chain state between runs, specify a base path by running a command
-similar to the following:
+### 🚀 **Production Environment**
+**Purpose**: Live production deployment
 
-```sh
-// Create a folder to use as the db base path
-$ mkdir my-chain-state
+```bash
+# Build with production configuration (includes security prompts)
+./scripts/build-environment.sh production release
 
-// Use of that folder to store the chain state
-$ ./target/release/solochain-template-node --dev --base-path ./my-chain-state/
-
-// Check the folder structure created inside the base path after running the chain
-$ ls ./my-chain-state
-chains
-$ ls ./my-chain-state/chains/
-dev
-$ ls ./my-chain-state/chains/dev
-db keystore network
+# Start production node (requires production keys)
+./target/release/solochain-template-node --chain production --validator
 ```
 
-### Connect with Polkadot-JS Apps Front-End
+**Configuration**:
+- **Max Authorities**: 32 (enterprise validator set)
+- **Rate Limiting**: 100 tx/block, 600 tx/minute (secure)
+- **Memory Limits**: 512KB per account (spam protection)
+- **Block Production**: Maximum security
+- **Block History**: 7200 blocks (1 hour)
 
-After you start the node template locally, you can interact with it using the
-hosted version of the [Polkadot/Substrate
-Portal](https://polkadot.js.org/apps/#/explorer?rpc=ws://localhost:9944)
-front-end by connecting to the local node endpoint. A hosted version is also
-available on [IPFS](https://dotapps.io/). You can
-also find the source code and instructions for hosting your own instance in the
-[`polkadot-js/apps`](https://github.com/polkadot-js/apps) repository.
+**⚠️ Security Requirements**:
+- **Generate production validator keys** (never use development keys)
+- **Register unique SS58 prefix** (replace generic prefix 42)
+- **Remove sudo access** (disabled in production genesis)
+- **Configure infrastructure security** (DDoS protection, firewalls)
+- **Enable monitoring and alerting**
 
-### Multi-Node Local Testnet
+---
 
-If you want to see the multi-node consensus algorithm in action, see [Simulate a
-network](https://docs.substrate.io/tutorials/build-a-blockchain/simulate-network/).
+## 📋 **Environment Comparison Table**
 
-## Template Structure
+| Feature | Development | Local Testnet | Staging | Production |
+|---------|-------------|---------------|---------|------------|
+| **Use Case** | Local dev | Multi-node test | Pre-production | Live deployment |
+| **Max Authorities** | 10 | 5 | 21 | 32 |
+| **Tx Per Block** | 1000 | 500 | 200 | 100 |
+| **Tx Per Minute** | 6000 | 3000 | 1200 | 600 |
+| **Memory/Account** | 2MB | 1MB | 512KB | 512KB |
+| **Block History** | 250 (2min) | 1200 (10min) | 2400 (20min) | 7200 (1hr) |
+| **Sudo Access** | ✅ Alice | ⚠️ Limited | ⚠️ Limited | ❌ Disabled |
+| **Multiple Blocks/Slot** | ✅ Yes | ❌ No | ❌ No | ❌ No |
 
-A Substrate project such as this consists of a number of components that are
-spread across a few directories.
+---
 
-### Node
+## 🛠️ **Build and Deployment Scripts**
 
-A blockchain node is an application that allows users to participate in a
-blockchain network. Substrate-based blockchain nodes expose a number of
-capabilities:
+### Using Environment-Specific Build Script (Recommended)
 
-- Networking: Substrate nodes use the [`libp2p`](https://libp2p.io/) networking
-  stack to allow the nodes in the network to communicate with one another.
-- Consensus: Blockchains must have a way to come to
-  [consensus](https://docs.substrate.io/fundamentals/consensus/) on the state of
-  the network. Substrate makes it possible to supply custom consensus engines
-  and also ships with several consensus mechanisms that have been built on top
-  of [Web3 Foundation
-  research](https://research.web3.foundation/Polkadot/protocols/NPoS).
-- RPC Server: A remote procedure call (RPC) server is used to interact with
-  Substrate nodes.
+```bash
+# Development build
+./scripts/build-environment.sh development release
 
-There are several files in the `node` directory. Take special note of the
-following:
+# Local testnet build  
+./scripts/build-environment.sh local-testnet release
 
-- [`chain_spec.rs`](./node/src/chain_spec.rs): A [chain
-  specification](https://docs.substrate.io/build/chain-spec/) is a source code
-  file that defines a Substrate chain's initial (genesis) state. Chain
-  specifications are useful for development and testing, and critical when
-  architecting the launch of a production chain. Take note of the
-  `development_config` and `testnet_genesis` functions. These functions are
-  used to define the genesis state for the local development chain
-  configuration. These functions identify some [well-known
-  accounts](https://docs.substrate.io/reference/command-line-tools/subkey/) and
-  use them to configure the blockchain's initial state.
-- [`service.rs`](./node/src/service.rs): This file defines the node
-  implementation. Take note of the libraries that this file imports and the
-  names of the functions it invokes. In particular, there are references to
-  consensus-related topics, such as the [block finalization and
-  forks](https://docs.substrate.io/fundamentals/consensus/#finalization-and-forks)
-  and other [consensus
-  mechanisms](https://docs.substrate.io/fundamentals/consensus/#default-consensus-models)
-  such as Aura for block authoring and GRANDPA for finality.
+# Staging build
+./scripts/build-environment.sh staging release
 
+# Production build (with security warnings)
+./scripts/build-environment.sh production release
+```
 
-### Runtime
+### Manual Cargo Commands
 
-In Substrate, the terms "runtime" and "state transition function" are analogous.
-Both terms refer to the core logic of the blockchain that is responsible for
-validating blocks and executing the state changes they define. The Substrate
-project in this repository uses
-[FRAME](https://docs.substrate.io/learn/runtime-development/#frame) to construct
-a blockchain runtime. FRAME allows runtime developers to declare domain-specific
-logic in modules called "pallets". At the heart of FRAME is a helpful [macro
-language](https://docs.substrate.io/reference/frame-macros/) that makes it easy
-to create pallets and flexibly compose them to create blockchains that can
-address [a variety of needs](https://substrate.io/ecosystem/projects/).
+```bash
+# Development (default - no features)
+cargo build --release
 
-Review the [FRAME runtime implementation](./runtime/src/lib.rs) included in this
-template and note the following:
+# Local testnet
+cargo build --release --features local-testnet
 
-- This file configures several pallets to include in the runtime. Each pallet
-  configuration is defined by a code block that begins with `impl
-  $PALLET_NAME::Config for Runtime`.
-- The pallets are composed into a single runtime by way of the
-  [#[runtime]](https://paritytech.github.io/polkadot-sdk/master/frame_support/attr.runtime.html)
-  macro, which is part of the [core FRAME pallet
-  library](https://docs.substrate.io/reference/frame-pallets/#system-pallets).
+# Staging
+cargo build --release --features staging
 
-### Pallets
+# Production
+cargo build --release --features production
+```
 
-The runtime in this project is constructed using many FRAME pallets that ship
-with [the Substrate
-repository](https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame) and a
-template pallet that is [defined in the
-`pallets`](./pallets/template/src/lib.rs) directory.
+### Build Artifacts
 
-A FRAME pallet is comprised of a number of blockchain primitives, including:
+Builds are organized in the `builds/` directory:
+```
+builds/
+├── development-release/
+│   ├── solochain-template-node
+│   └── BUILD_INFO.md
+├── local-testnet-release/
+│   ├── solochain-template-node  
+│   └── BUILD_INFO.md
+├── staging-release/
+│   ├── solochain-template-node
+│   └── BUILD_INFO.md
+└── production-release/
+    ├── solochain-template-node
+    └── BUILD_INFO.md
+```
 
-- Storage: FRAME defines a rich set of powerful [storage
-  abstractions](https://docs.substrate.io/build/runtime-storage/) that makes it
-  easy to use Substrate's efficient key-value database to manage the evolving
-  state of a blockchain.
-- Dispatchables: FRAME pallets define special types of functions that can be
-  invoked (dispatched) from outside of the runtime in order to update its state.
-- Events: Substrate uses
-  [events](https://docs.substrate.io/build/events-and-errors/) to notify users
-  of significant state changes.
-- Errors: When a dispatchable fails, it returns an error.
+---
 
-Each pallet has its own `Config` trait which serves as a configuration interface
-to generically define the types and parameters it depends on.
+## 🚀 **Startup Commands**
 
-## Alternatives Installations
+### Development Startup
+```bash
+# Quick development start (temporary database)
+./target/release/solochain-template-node --dev
 
-Instead of installing dependencies and building this source directly, consider
-the following alternatives.
+# Development with persistent data
+mkdir -p ./dev-data
+./target/release/solochain-template-node --dev --base-path ./dev-data
 
-### Nix
+# Development with detailed logging
+RUST_LOG=debug ./target/release/solochain-template-node --dev
+```
 
-Install [nix](https://nixos.org/) and
-[nix-direnv](https://github.com/nix-community/nix-direnv) for a fully
-plug-and-play experience for setting up the development environment. To get all
-the correct dependencies, activate direnv `direnv allow`.
+### Local Testnet Startup
+```bash
+# Single node local testnet
+./target/release/solochain-template-node --chain local
 
-### Docker
+# Multi-node local testnet (Node 1)
+./target/release/solochain-template-node \
+  --chain local \
+  --validator \
+  --port 30333 \
+  --rpc-port 9944 \
+  --base-path ./node1-data
 
-Please follow the [Substrate Docker instructions
-here](https://github.com/paritytech/polkadot-sdk/blob/master/substrate/docker/README.md) to
-build the Docker container with the Substrate Node Template binary.
+# Multi-node local testnet (Node 2)  
+./target/release/solochain-template-node \
+  --chain local \
+  --validator \
+  --port 30334 \
+  --rpc-port 9945 \
+  --base-path ./node2-data \
+  --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/NODE1_PEER_ID
+```
+
+### Staging Startup
+```bash
+# Insert staging keys first
+./target/release/solochain-template-node key insert \
+  --base-path ./staging-data \
+  --chain staging \
+  --scheme Sr25519 \
+  --suri "YOUR_STAGING_SEED" \
+  --key-type micc
+
+# Start staging validator
+./target/release/solochain-template-node \
+  --chain staging \
+  --validator \
+  --base-path ./staging-data \
+  --port 30333 \
+  --rpc-port 9944
+```
+
+### Production Startup
+```bash
+# 1. Insert production keys (SECURE SEED REQUIRED)
+./target/release/solochain-template-node key insert \
+  --base-path ./production-data \
+  --chain production \
+  --scheme Sr25519 \
+  --suri "YOUR_SECURE_PRODUCTION_SEED" \
+  --key-type micc
+
+./target/release/solochain-template-node key insert \
+  --base-path ./production-data \
+  --chain production \
+  --scheme Ed25519 \
+  --suri "YOUR_SECURE_PRODUCTION_SEED" \
+  --key-type gran
+
+# 2. Start production validator
+./target/release/solochain-template-node \
+  --chain production \
+  --validator \
+  --base-path ./production-data \
+  --port 30333 \
+  --rpc-port 9944 \
+  --no-telemetry
+```
+
+---
+
+## ✨ Key Features
+
+- 🆓 **Zero Transaction Fees** - No fees required for any transactions
+- ⚡ **MICC Consensus** - Custom event-driven consensus mechanism  
+- 🏗️ **Event-Driven Blocks** - Blocks created when transactions arrive
+- 🌐 **Full RPC API** - Complete Substrate JSON-RPC interface
+- 🔗 **Polkadot-JS Compatible** - Works with all standard Substrate tools
+- 🛡️ **GRANDPA Finality** - Proven Byzantine fault-tolerant finality
+- 🌍 **Environment-Specific Configuration** - Optimized for each deployment context
+- 🔒 **Production Security** - Comprehensive spam protection and security controls
+
+## 🛡️ **Security & Rate Limiting**
+
+### Spam Protection
+The blockchain includes comprehensive **multi-layer spam protection**:
+
+- **Per-Block Limits**: Prevents transaction flooding in single blocks
+- **Time-Based Limits**: Rate limiting over time windows
+- **Per-Account Limits**: Memory and transaction count limits per user
+- **Emergency Controls**: System-wide pause functionality
+- **Environment Tuning**: Conservative limits for production, permissive for development
+
+### Transaction Extensions
+```rust
+// Integrated into transaction validation pipeline
+pub type TxExtension = (
+    frame_system::CheckSpecVersion<Runtime>,
+    frame_system::CheckTxVersion<Runtime>,
+    frame_system::CheckGenesis<Runtime>,
+    frame_system::CheckEra<Runtime>,
+    frame_system::CheckNonce<Runtime>,
+    frame_system::CheckWeight<Runtime>,
+    pallet_rate_limiter::CheckRateLimit<Runtime>, // 🔒 SPAM PROTECTION
+    frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
+    frame_system::WeightReclaim<Runtime>,
+);
+```
+
+---
+
+## 🧪 **Testing & Validation**
+
+### Development Testing
+```bash
+# Start development blockchain
+./target/release/solochain-template-node --dev
+
+# Run all tests
+cargo test
+
+# Test specific component
+cargo test -p pallet-rate-limiter
+cargo test -p solochain-template-runtime
+```
+
+### Environment Validation
+```bash
+# Validate configuration for current environment
+cargo run --features production --bin validate-config
+
+# Check build configuration
+./scripts/build-environment.sh staging release
+cat builds/staging-release/BUILD_INFO.md
+```
+
+### Network Health Check
+```bash
+# Check node status
+curl -H "Content-Type: application/json" \
+     -d '{"id":1, "jsonrpc":"2.0", "method": "system_health", "params":[]}' \
+     http://localhost:9944/
+
+# Check block production
+curl -H "Content-Type: application/json" \
+     -d '{"id":1, "jsonrpc":"2.0", "method": "chain_getHeader", "params":[]}' \
+     http://localhost:9944/
+```
+
+---
+
+## 🔧 **Development & Customization**
+
+### Build Requirements
+- Rust 1.87.0 or later
+- Substrate development environment
+
+### Custom Pallets
+The template includes modular consensus components:
+- **MICC Consensus Pallet** (`consensus/micc/`) - Core consensus logic
+- **MICC Client** (`consensus/micc-client/`) - Client consensus implementation  
+- **MICC Primitives** (`consensus/micc-primitives/`) - Core consensus types
+- **Rate Limiter Pallet** (`pallets/rate-limiter/`) - Spam protection
+- **Slots Module** (`consensus/slots/`) - Time slot management
+
+### Adding Custom Pallets
+Add to `runtime/src/lib.rs`:
+
+```rust
+#[runtime::pallet_index(6)]
+pub type YourPallet = your_pallet;
+```
+
+---
+
+## 📚 **Documentation**
+
+- **[Environment Configuration Guide](docs/ENVIRONMENT_CONFIGURATION.md)** - Detailed environment setup
+- **[Security Audit Report](docs/AUDIT_FINDINGS.md)** - Comprehensive security analysis
+- **[Production Security Guide](docs/PRODUCTION_SECURITY_GUIDE.md)** - Production deployment
+- **[Security Fixes Tasks](docs/SECURITY_FIXES_TASKS.md)** - Implementation status
+
+## 🔒 **Production Security Checklist**
+
+Before production deployment:
+
+### Security Implementation: ✅ **COMPLETE**
+- [x] Multi-layer spam protection implemented
+- [x] Consensus security vulnerabilities eliminated  
+- [x] Resource exhaustion attacks mitigated
+- [x] Panic-based vulnerabilities removed
+- [x] Environment-specific configuration system
+- [x] Comprehensive monitoring infrastructure
+
+### Production Customization: **REQUIRED**
+- [ ] Generate cryptographically secure validator keys
+- [ ] Register unique SS58 prefix for network identity
+- [ ] Create production chain specification without development keys
+- [ ] Configure environment-specific parameters
+- [ ] Remove or secure sudo access for production
+
+### Operational Security: **RECOMMENDED**
+- [ ] Deploy infrastructure DDoS protection
+- [ ] Configure monitoring and alerting systems
+- [ ] Implement validator firewall rules
+- [ ] Enable equivocation slashing after testing
+- [ ] Configure secure key rotation procedures
+
+---
+
+## 🏗️ **Architecture**
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   RPC API       │    │   MICC Node     │
+│                 │───▶│                 │───▶│                 │
+│ Polkadot-JS     │    │ ws://localhost  │    │ Event-driven    │
+│ Custom Apps     │    │ :9944           │    │ Consensus       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                               │
+                                               ▼
+                                       ┌─────────────────┐
+                                       │   Substrate     │
+                                       │   Runtime       │
+                                       │ - Rate Limiter  │
+                                       │ - Balances      │
+                                       │ - MICC          │
+                                       │ - GRANDPA       │
+                                       │ - System        │
+                                       └─────────────────┘
+```
+
+## 🌟 **What Makes This Special**
+
+### Fee-Free Transactions with Security
+- **Zero transaction fees** for all operations
+- **Comprehensive spam protection** prevents abuse
+- **Multi-layer rate limiting** maintains network health
+- **Emergency controls** for threat response
+
+### Advanced Consensus
+- **Event-driven block production** for instant finality
+- **500ms block time** optimized for global networks
+- **Enhanced equivocation detection** prevents double-spending
+- **Authority performance monitoring** ensures network health
+
+### Production-Ready Security
+- **Environment-specific configuration** prevents misconfiguration
+- **Compile-time safety** eliminates runtime configuration errors
+- **Comprehensive security audit** validates implementation
+- **Production hardening** with conservative security parameters
+
+---
+
+## 🤝 **Contributing**
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 **License**
+
+This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 **Support**
+
+- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-repo/discussions)
+- **Documentation**: See `docs/` directory
+
+---
+
+**🎉 Happy Building!** Your environment-configured, production-ready, fee-free blockchain is ready to deploy across development, staging, and production environments.

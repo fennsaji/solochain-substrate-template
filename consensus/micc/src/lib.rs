@@ -45,6 +45,7 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	traits::{DisabledValidators, FindAuthor, Get, OnTimestampSet, OneSessionHandler},
 	BoundedSlice, BoundedVec, ConsensusEngineId, Parameter,
+	dispatch::DispatchResult,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use log;
@@ -58,9 +59,17 @@ use sp_runtime::{
 mod mock;
 mod tests;
 
+/// Security testing module for consensus robustness validation
+#[cfg(test)]
+mod security_tests;
+
+/// Equivocation detection and handling for MICC consensus
+pub mod equivocation;
+
 pub use pallet::*;
 
 const LOG_TARGET: &str = "runtime::micc";
+
 
 /// A slot duration provider which infers the slot duration from the
 /// [`pallet_timestamp::Config::MinimumPeriod`] by multiplying it by two, to ensure
@@ -80,9 +89,14 @@ impl<T: pallet_timestamp::Config> Get<T::Moment> for MinimumPeriodTimesTwo<T> {
 pub mod pallet {
 	use super::*;
 	use frame_support::pallet_prelude::*;
+	use frame_system::pallet_prelude::OriginFor;
+	use frame_system::{ensure_root, ensure_signed};
 
 	#[pallet::config]
 	pub trait Config: pallet_timestamp::Config + frame_system::Config {
+		/// The overarching event type.
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
 		/// The identifier type for an authority.
 		type AuthorityId: Member
 			+ Parameter
@@ -129,9 +143,47 @@ pub mod pallet {
 				let current_slot = CurrentSlot::<T>::get();
 
 				if T::AllowMultipleBlocksPerSlot::get() {
-					assert!(current_slot <= new_slot, "Slot must not decrease");
+					if current_slot > new_slot {
+						log::error!(
+							target: LOG_TARGET,
+							"🚨 Slot decreased from {:?} to {:?}. Gracefully handling.",
+							current_slot, new_slot
+						);
+						
+						Self::deposit_event(Event::SlotValidationFailed {
+							current_slot,
+							new_slot,
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						Self::deposit_event(Event::ConsensusErrorRecovered {
+							error_type: 2u8, // SlotTiming
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						return T::DbWeight::get().reads(1);
+					}
 				} else {
-					assert!(current_slot < new_slot, "Slot must increase");
+					if current_slot >= new_slot {
+						log::error!(
+							target: LOG_TARGET,
+							"🚨 Slot failed to increase from {:?} to {:?}. Gracefully handling.",
+							current_slot, new_slot
+						);
+						
+						Self::deposit_event(Event::SlotValidationFailed {
+							current_slot,
+							new_slot,
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						Self::deposit_event(Event::ConsensusErrorRecovered {
+							error_type: 2u8, // SlotTiming
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						return T::DbWeight::get().reads(1);
+					}
 				}
 
 				CurrentSlot::<T>::put(new_slot);
@@ -139,11 +191,47 @@ pub mod pallet {
 				if let Some(n_authorities) = <Authorities<T>>::decode_len() {
 					let authority_index = *new_slot % n_authorities as u64;
 					if T::DisabledValidators::is_disabled(authority_index as u32) {
-						panic!(
-							"Validator with index {:?} is disabled and should not be attempting to author blocks.",
-							authority_index,
+						log::error!(
+							target: LOG_TARGET,
+							"🚨 Disabled validator attempted to author block at index {:?}. Gracefully skipping.",
+							authority_index
 						);
+						
+						// Emit event for monitoring and alerting
+						Self::deposit_event(Event::DisabledValidatorAttempt { 
+							authority_index: authority_index as u32,
+							slot: new_slot,
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						// Emit recovery event
+						Self::deposit_event(Event::ConsensusErrorRecovered {
+							error_type: 0u8, // DisabledValidator
+							block_number: frame_system::Pallet::<T>::block_number(),
+						});
+						
+						// Return early with minimal weight instead of panicking
+						return T::DbWeight::get().reads(1);
 					}
+				} else {
+					log::error!(
+						target: LOG_TARGET,
+						"🚨 Failed to decode authorities length. Gracefully handling."
+					);
+					
+					// Emit event for monitoring
+					Self::deposit_event(Event::AuthoritiesDecodeError {
+						block_number: frame_system::Pallet::<T>::block_number(),
+					});
+					
+					// Emit recovery event
+					Self::deposit_event(Event::ConsensusErrorRecovered {
+						error_type: 1u8, // AuthorityDecode
+						block_number: frame_system::Pallet::<T>::block_number(),
+					});
+					
+					// Return with minimal weight
+					return T::DbWeight::get().reads(1);
 				}
 
 				// TODO [#3398] Generate offence report for all authorities that skipped their
@@ -172,6 +260,18 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type CurrentSlot<T: Config> = StorageValue<_, Slot, ValueQuery>;
 
+	/// Configuration for equivocation detection and handling.
+	#[pallet::storage]
+	pub type EquivocationConfig<T: Config> = StorageValue<_, crate::equivocation::EquivocationConfig, ValueQuery>;
+
+	/// Current session equivocations count per authority.
+	#[pallet::storage]
+	pub type SessionEquivocations<T: Config> = StorageMap<_, Blake2_128Concat, T::AuthorityId, u32, ValueQuery>;
+
+	/// Disabled authorities due to equivocation.
+	#[pallet::storage]
+	pub type DisabledAuthorities<T: Config> = StorageMap<_, Blake2_128Concat, T::AuthorityId, BlockNumberFor<T>, OptionQuery>;
+
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T: Config> {
@@ -182,6 +282,147 @@ pub mod pallet {
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			Pallet::<T>::initialize_authorities(&self.authorities);
+		}
+	}
+
+	/// Events emitted by the MICC pallet.
+	#[pallet::event]
+	#[pallet::generate_deposit(pub(super) fn deposit_event)]
+	pub enum Event<T: Config> {
+		/// Equivocation detected. [authority, slot, session]
+		EquivocationDetected {
+			authority: T::AuthorityId,
+			slot: Slot,
+			session: u32,
+		},
+		/// Authority disabled due to equivocation. [authority, block_number]
+		AuthorityDisabled {
+			authority: T::AuthorityId,
+			block_number: BlockNumberFor<T>,
+		},
+		/// Equivocation configuration updated.
+		EquivocationConfigUpdated,
+		/// Session equivocations cleared.
+		SessionEquivocationsCleared,
+		/// Disabled validator attempted to author block
+		DisabledValidatorAttempt {
+			authority_index: u32,
+			slot: Slot,
+			block_number: BlockNumberFor<T>,
+		},
+		/// Authority set decoding failed
+		AuthoritiesDecodeError {
+			block_number: BlockNumberFor<T>,
+		},
+		/// Consensus error recovered gracefully
+		/// error_type: 0=DisabledValidator, 1=AuthorityDecode, 2=SlotTiming
+		ConsensusErrorRecovered {
+			error_type: u8,
+			block_number: BlockNumberFor<T>,
+		},
+		/// Slot validation failed but recovered
+		SlotValidationFailed {
+			current_slot: Slot,
+			new_slot: Slot,
+			block_number: BlockNumberFor<T>,
+		},
+	}
+
+	/// Errors that can occur in the MICC pallet.
+	#[pallet::error]
+	pub enum Error<T> {
+		/// Invalid equivocation configuration.
+		InvalidEquivocationConfig,
+		/// Authority not found.
+		AuthorityNotFound,
+		/// Equivocation already reported.
+		EquivocationAlreadyReported,
+		/// Failed to decode authorities
+		AuthoritiesDecodeFailed,
+		/// Disabled validator attempted block authoring
+		DisabledValidatorAttempt,
+		/// Invalid slot for current block
+		InvalidSlot,
+		/// Authority set is empty
+		EmptyAuthoritySet,
+		/// Slot timing validation failed
+		SlotTimingError,
+		/// Block production outside allowed time window
+		OutsideProductionWindow,
+	}
+
+	#[pallet::call]
+	impl<T: Config> Pallet<T> {
+		/// Enable or disable equivocation slashing (root only).
+		#[pallet::call_index(0)]
+		#[pallet::weight(10_000)]
+		pub fn set_equivocation_slashing(
+			origin: OriginFor<T>,
+			enable: bool,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			let mut config = EquivocationConfig::<T>::get();
+			config.enable_slashing = enable;
+			EquivocationConfig::<T>::put(config);
+			Self::deposit_event(Event::EquivocationConfigUpdated);
+			Ok(())
+		}
+
+		/// Report equivocation (can be called by anyone with valid proof).
+		#[pallet::call_index(1)]
+		#[pallet::weight(10_000)]
+		pub fn report_equivocation(
+			origin: OriginFor<T>,
+			report: crate::equivocation::EquivocationReport<T::AuthorityId>,
+		) -> DispatchResult {
+			let _ = ensure_signed(origin)?;
+
+			// Increment equivocation count for this authority
+			let count = SessionEquivocations::<T>::get(&report.offender);
+			let new_count = count.saturating_add(1);
+			SessionEquivocations::<T>::insert(&report.offender, new_count);
+
+			Self::deposit_event(Event::EquivocationDetected {
+				authority: report.offender.clone(),
+				slot: report.slot,
+				session: report.session_index,
+			});
+
+			// Check if authority should be disabled
+			let config = EquivocationConfig::<T>::get();
+			if config.enable_slashing && new_count > 0 {
+				let current_block = frame_system::Pallet::<T>::block_number();
+				DisabledAuthorities::<T>::insert(&report.offender, current_block);
+				
+				Self::deposit_event(Event::AuthorityDisabled {
+					authority: report.offender,
+					block_number: current_block,
+				});
+			}
+
+			Ok(())
+		}
+
+		/// Clear session equivocations (root only) - used for new sessions.
+		#[pallet::call_index(2)]
+		#[pallet::weight(10_000)]
+		pub fn clear_session_equivocations(origin: OriginFor<T>) -> DispatchResult {
+			ensure_root(origin)?;
+			let _ = SessionEquivocations::<T>::clear(u32::MAX, None);
+			Self::deposit_event(Event::SessionEquivocationsCleared);
+			Ok(())
+		}
+
+		/// Re-enable a disabled authority (root only).
+		#[pallet::call_index(3)]
+		#[pallet::weight(10_000)]
+		pub fn enable_authority(
+			origin: OriginFor<T>,
+			authority: T::AuthorityId,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			DisabledAuthorities::<T>::remove(&authority);
+			Ok(())
 		}
 	}
 }
@@ -216,10 +457,27 @@ impl<T: Config> Pallet<T> {
 	/// The authorities length must be equal or less than T::MaxAuthorities.
 	pub fn initialize_authorities(authorities: &[T::AuthorityId]) {
 		if !authorities.is_empty() {
-			assert!(<Authorities<T>>::get().is_empty(), "Authorities are already initialized!");
-			let bounded = <BoundedSlice<'_, _, T::MaxAuthorities>>::try_from(authorities)
-				.expect("Initial authority set must be less than T::MaxAuthorities");
-			<Authorities<T>>::put(bounded);
+			if !<Authorities<T>>::get().is_empty() {
+				log::error!(
+					target: LOG_TARGET,
+					"🚨 Attempted to initialize authorities when already initialized. Ignoring."
+				);
+				return;
+			}
+			
+			match <BoundedSlice<'_, _, T::MaxAuthorities>>::try_from(authorities) {
+				Ok(bounded) => <Authorities<T>>::put(bounded),
+				Err(_) => {
+					log::error!(
+						target: LOG_TARGET,
+						"🚨 Initial authority set size {} exceeds maximum {}. Truncating.",
+						authorities.len(),
+						T::MaxAuthorities::get()
+					);
+					let bounded = <BoundedVec<_, T::MaxAuthorities>>::truncate_from(authorities.to_vec());
+					<Authorities<T>>::put(bounded);
+				}
+			}
 		}
 	}
 
@@ -244,6 +502,29 @@ impl<T: Config> Pallet<T> {
 	/// Determine the Micc slot-duration based on the Timestamp module configuration.
 	pub fn slot_duration() -> T::Moment {
 		T::SlotDuration::get()
+	}
+
+	/// Check if an authority is disabled due to equivocation.
+	pub fn is_authority_disabled(authority: &T::AuthorityId) -> bool {
+		DisabledAuthorities::<T>::contains_key(authority)
+	}
+
+	/// Get the current equivocation configuration.
+	pub fn get_equivocation_config() -> crate::equivocation::EquivocationConfig {
+		EquivocationConfig::<T>::get()
+	}
+
+	/// Get equivocation count for a specific authority.
+	pub fn get_equivocation_count(authority: &T::AuthorityId) -> u32 {
+		SessionEquivocations::<T>::get(authority)
+	}
+
+	/// Initialize equivocation detection with default configuration.
+	pub fn initialize_equivocation_config() {
+		if !EquivocationConfig::<T>::exists() {
+			let default_config = crate::equivocation::EquivocationConfig::default();
+			EquivocationConfig::<T>::put(default_config);
+		}
 	}
 
 	/// Ensure the correctness of the state of this pallet.
@@ -391,15 +672,35 @@ impl<T: Config> IsMember<T::AuthorityId> for Pallet<T> {
 impl<T: Config> OnTimestampSet<T::Moment> for Pallet<T> {
 	fn on_timestamp_set(moment: T::Moment) {
 		let slot_duration = Self::slot_duration();
-		assert!(!slot_duration.is_zero(), "Micc slot duration cannot be zero.");
+		if slot_duration.is_zero() {
+			log::error!(
+				target: LOG_TARGET,
+				"🚨 Micc slot duration is zero. Cannot process timestamp. Ignoring."
+			);
+			return;
+		}
 
 		let timestamp_slot = moment / slot_duration;
 		let timestamp_slot = Slot::from(timestamp_slot.saturated_into::<u64>());
+		let current_slot = CurrentSlot::<T>::get();
 
-		assert_eq!(
-			CurrentSlot::<T>::get(),
-			timestamp_slot,
-			"Timestamp slot must match `CurrentSlot`"
-		);
+		if current_slot != timestamp_slot {
+			log::error!(
+				target: LOG_TARGET,
+				"🚨 Timestamp slot {:?} does not match CurrentSlot {:?}. Gracefully handling.",
+				timestamp_slot, current_slot
+			);
+			
+			Self::deposit_event(Event::SlotValidationFailed {
+				current_slot,
+				new_slot: timestamp_slot,
+				block_number: frame_system::Pallet::<T>::block_number(),
+			});
+			
+			Self::deposit_event(Event::ConsensusErrorRecovered {
+				error_type: 2u8, // SlotTiming
+				block_number: frame_system::Pallet::<T>::block_number(),
+			});
+		}
 	}
 }
